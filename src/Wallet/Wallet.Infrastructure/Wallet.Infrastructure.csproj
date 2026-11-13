@@ -3,6 +3,7 @@
     <ProjectReference Include="../Wallet.Application/Wallet.Application.csproj" />
     <ProjectReference Include="../../Contracts/Contracts.csproj" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="RabbitMQ.Client" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
   </ItemGroup>
