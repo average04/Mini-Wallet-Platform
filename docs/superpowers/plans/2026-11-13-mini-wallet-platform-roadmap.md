@@ -203,3 +203,5 @@ Implementation decisions, in the order recorded:
 | Keep the feature branch committed locally. | Implementation was authorized; publishing, submitting or merging was not requested. Integration remains a separate action. |
 
 No deferred minor review findings. Optional frontend/SignalR features remain outside the agreed core. See README for commands, credentials, precise behavior and elapsed session time.
+
+Local verification artifacts remain in the ignored .superpowers/sdd task folder because automatic approval review rejected its cleanup as "blocked by policy". They are not part of the committed deliverable.
