@@ -1,7 +1,7 @@
 # Mini Wallet Platform — Design Baseline
 
 Date: 2026-11-13
-Status: revised for Claude review, round 2; no application implementation.
+Status: approved by Claude in Collidr round 2 at commit 4200919; non-blocking implementation notes incorporated below. No application implementation.
 Source: the supplied candidate-brief-v2.md and architecture discussion. The assessment is reference material, not authorization to submit the work or contact anyone.
 
 ## Purpose and limits
@@ -61,6 +61,8 @@ Keycloak owns signup, login, passwords, email verification, resets, and token is
 
 Use an explicitly configured platform audience, mini-wallet-api, in both APIs. Keycloak's public clients must issue that audience, enable authorization code + PKCE S256, disable password grants, and use exact redirect URIs. Configure the client Web Origins for both Swagger origins; this enables browser token exchange. Separately configure API CORS for the future web-app origin. New registrations receive the player role. Normalize permitted nested provider roles into platform permissions, including Profiles.ManageAny, Wallets.ReadAny, Wallets.RecordWin, and Wallets.GrantBonus. Test the same browser-issued access token against both APIs.
 
+Configure both Swagger UIs with the additional OAuth parameter prompt=login. The demo explains clearing Swagger's current authorization and signing in with the other account; separate normal/private browser windows for player/admin are an alternative. Verify the role switch so a retained IdP session does not silently reuse the player's identity. See [Swagger OAuth configuration](https://swagger.io/docs/open-source-tools/swagger-ui/usage/oauth2/).
+
 For the local Docker setup, propose a fixed browser-facing Keycloak hostname of http://localhost:8080 with hostname-backchannel-dynamic enabled. APIs fetch discovery from the internal keycloak:8080 address while validating the public realm issuer. Verify that the discovered JWKS URL is also reachable inside containers: changing MetadataAddress alone does not solve an unreachable jwks_uri. Browser authorization/token URLs remain browser-reachable. Local HTTP metadata is development-only; issuer/signature/audience/lifetime validation remains enabled. The pinned Keycloak version must pass this actual browser/container smoke check. See [Keycloak hostname guidance](https://www.keycloak.org/server/hostname).
 
 Map the exact pair (issuer, subject) to a platform-generated PlayerId. Before profile creation the current actor has external identity/permissions but no PlayerId. A verified-email claim is required to create a profile. Admin operations do not require the admin to have a player profile. PlayerCreatedV1 includes the platform ID and external association; Wallet commits its local lookup with the three wallets.
@@ -91,6 +93,8 @@ Transaction inputs:
 - BONUS: type, playerId, currency, amount. Admin only; credit an already provisioned target wallet, with actor and target in the audit record. This is a simulated promotional credit, not a payment/deposit integration.
 Reject unknown types, unknown fields, and fields incompatible with the chosen type. All credits require the corresponding admin permission; no player-only token can credit a wallet.
 
+Declare Idempotency-Key as a required OpenAPI header parameter on transaction POST so Swagger's Try it out exposes an editable field. Return PlayerId in the profile response and show how to reuse it in the admin BONUS example.
+
 Monetary JSON values are invariant decimal strings. Use C# decimal and PostgreSQL numeric(28,8), validate scale/range before storage, and check resulting balance limits. Timestamps are UTC ISO 8601. History is ordered by (createdAt, transactionId) descending; cursor contains both, is bound to player/filters, and has default page size 20 and maximum 100.
 
 Use Problem Details with stable code and trace ID: 400 invalid input; 401 unauthenticated/invalid token; 403 insufficient permission; 404 inaccessible/missing referenced transaction or resource; 409 insufficient funds, duplicate WIN, conflicting in-scope idempotency payload, balance limit, or pending provisioning; 503 retryable infrastructure failure. Docs/sign-in assets are public; all business HTTP endpoints require bearer authentication. Infrastructure health checks do not create unauthenticated business routes.
@@ -105,7 +109,9 @@ Use Problem Details with stable code and trace ID: 400 invalid input; 401 unauth
 
 **Idempotency scope:** (targetPlayerId, wallet.transactions.v1, key). Keys are unique per target player, not globally or per admin. An admin may use the same key for different players as separate operations; document this explicitly. Within one target-player scope, the same key and canonical payload returns the original status/result/Location; different payload returns 409. Currency, type, normalized amount and bet/target identifiers participate in the fingerprint. Equivalent decimal spellings normalize. Authorization is checked afresh even on replay; audit records retain the original actor. Concurrent duplicates have one effect. Retain deterministic business failures after reservation, but not authentication/validation errors or transient infrastructure failures. A new business attempt after funds change needs a new key. Retain keys for the lifetime of the take-home data.
 
-**Users publisher:** use SELECT FOR UPDATE SKIP LOCKED to claim one pending outbox row in a transaction, publish a persistent message with mandatory routing and a publisher confirm, then mark published and commit. No lease table. A crash after publish but before commit can redeliver; the inbox makes this safe. Limit broker confirmation to three seconds, roll back/release the outbox lock on failure, then back off outside the transaction (1, 2, 4, 8, 16, up to 30 seconds). This deliberately holds only an outbox-row lock over a bounded broker exchange, never a profile/wallet lock. It is a small-system trade-off to document; fail fast on a broken connection.
+**Broker topology:** both workers idempotently declare the same exchange, durable provisioning queue/binding, and dead-letter exchange/queue/binding before publishing or consuming. The publisher can safely start while Wallet.Worker is stopped. Keep declarations consistent across hosts and reconnects.
+
+**Users publisher:** use SELECT FOR UPDATE SKIP LOCKED to claim one pending outbox row in a transaction and publish a persistent message with mandatory routing. Mark published and commit only after a publisher confirm with no basic.return for that publication. A returned message counts as failure even if subsequently confirmed; roll back the claim and retry. See [RabbitMQ confirm semantics](https://www.rabbitmq.com/docs/confirms#when-publishes-are-confirmed). No lease table. A crash after publish but before commit can redeliver; the inbox makes this safe. Limit broker confirmation to three seconds, roll back/release the outbox lock on failure, then back off outside the transaction (1, 2, 4, 8, 16, up to 30 seconds). This deliberately holds only an outbox-row lock over a bounded broker exchange, never a profile/wallet lock. It is a small-system trade-off to document; fail fast on a broken connection.
 
 **Wallet consumer:** durable queue, manual acknowledgements, prefetch 1 per worker. In one transaction commit the inbox marker, local identity lookup, and exactly one zero wallet per USD/EUR/BTC. Acknowledge only after commit. Redelivery cannot recreate/reset a funded wallet. During a transient DB failure, retain the delivery unacknowledged and retry the whole DB transaction with capped backoff; do not immediately nack/requeue in a tight loop. Shutdown closes the channel so unacknowledged work is redelivered. Transient outages never exhaust into a manual-only queue. Reject malformed/conflicting messages to a retained dead-letter queue and log the reason; automated poison-message repair/replay tooling is deferred.
 
@@ -119,7 +125,7 @@ Keycloak imports local test player/admin accounts and roles; it does not create 
 1. Start Compose and sign in as the verified test player through Swagger PKCE.
 2. POST the player's profile; wait for the Wallet API's provisioning response to become ready.
 3. Confirm USD, EUR, and BTC all start at zero.
-4. Sign in as admin and submit BONUS for USD 100 using that PlayerId and a documented key.
+4. Switch Swagger authorization to the admin account and submit BONUS for USD 100 using the PlayerId from the profile POST response (or GET /profiles/me) and a documented key in the Idempotency-Key field.
 5. Sign in as player and BET USD 10 with a new key; balance becomes USD 90.
 6. Sign in as admin and WIN USD 15 against that successful BET; balance becomes USD 105.
 7. Inspect the three successful history entries and replay each request with its original key to prove no repeated effect.
@@ -129,7 +135,7 @@ Tests may insert wallet/identity fixtures directly into their isolated databases
 
 ## Verification and deliberate scope cuts
 
-Use two WebApplicationFactory hosts sharing Testcontainers PostgreSQL for cross-instance wallet correctness; a load balancer demo is unnecessary. Testcontainers start test dependencies, so dotnet test does not require the application Compose stack to be running. Use one representative scenario per guarantee, not duplicate service/platform suites. Required checks include concurrent debits, same-key replay, separate-key duplicate WIN, unauthorized credits/access/replays, precision limits, atomic profile/event creation, duplicate provisioning, automatic outage recovery, and a real PKCE/signup demo.
+Use two WebApplicationFactory hosts sharing Testcontainers PostgreSQL for cross-instance wallet correctness; a load balancer demo is unnecessary. Docker must be running for dotnet test; Testcontainers start test dependencies, so the application Compose stack need not be running. Use one representative scenario per guarantee, not duplicate service/platform suites. Required checks include concurrent debits, same-key replay, separate-key duplicate WIN, unauthorized credits/access/replays, precision limits, atomic profile/event creation, duplicate provisioning, automatic outage recovery, and a real PKCE/signup demo. The provisioning fixture starts with no predeclared broker queues and Wallet.Worker stopped; additionally force an unroutable publish and prove the outbox stays pending until routing is restored and retry succeeds.
 
 Cuts already applied: live identity-link command/event/consumer and second IdP; separate architecture/platform test projects; custom lease table; startup money seed; exhaustive crash/replica matrices. Defer SignalR, frontend, further transaction types beyond demo BONUS, production deployment, poison-message replay tooling, and migration UI. The roadmap ranks remaining cuts and checkpoints. Do not cut the required two-instance concurrency, basic duplicate/outage tests, authorization, or durable transaction boundaries.
 

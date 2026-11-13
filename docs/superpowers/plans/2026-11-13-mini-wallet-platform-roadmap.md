@@ -8,7 +8,7 @@
 
 **Tech Stack:** .NET 10, ASP.NET Core, EF Core/Npgsql, PostgreSQL, RabbitMQ, Keycloak, Mailpit, Swagger UI, FluentValidation, xUnit/Testcontainers, Docker Compose.
 
-**Spec:** [Design baseline](../specs/2026-11-13-mini-wallet-platform-design.md). This round addresses Claude's review of commit 2196972; runtime/infrastructure choices remain documented implementation proposals.
+**Spec:** [Design baseline](../specs/2026-11-13-mini-wallet-platform-design.md). Claude approved the revised design/roadmap at commit 4200919 in Collidr round 2; its non-blocking implementation notes are folded into the milestones below. Runtime/infrastructure choices remain documented implementation proposals.
 
 **Status:** Revised 2026-11-13; no implementation milestones complete. Stable .NET SDK 10.0.103 and preview 10.0.300-preview.0.26177.108 were both found locally, plus Docker Compose. At execution, choose a supported serviced stable .NET 10 version, pin it in global.json and container images, and disallow prerelease SDK selection. No container startup is claimed yet.
 
@@ -49,6 +49,8 @@ Checkpoints:
 - **Hour 9:** feature freeze; validation, README, demonstrated limitations only.
 - **Hour 10:** stop and record actual outcomes/unmet requirements.
 
+At the hour-7 checkpoint, account for the tight profile milestone: its association/outbox migrations, race handling and tests may take 1–1.5 hours rather than the estimated 0.75–1 hour. The ten-hour cap and disclosure rule still apply.
+
 Ordered cut list:
 1. Live identity-link command/event/consumer, migration UI, and second IdP — already deferred.
 2. Poison-message replay automation or a long operational runbook — keep retained dead-letter messages and short diagnostic instructions.
@@ -73,7 +75,7 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 - [ ] Create the 13-project layout in the design and pin stable compatible versions.
 - [ ] Define Application ports for current actor, focused repositories, and transaction control; freeze the small /api/v1 contract and money/error conventions.
 - [ ] Add dependency checks in the existing service test projects. Domain/Application cannot reference Infrastructure/API/Worker or other-service internals.
-- [ ] Bring up minimal container wiring and database initialization; add each actual migration alongside its feature. Start README prerequisites/commands now.
+- [ ] Bring up minimal container wiring and database initialization; add each actual migration alongside its feature. Start README prerequisites/commands now, including that Docker must be running for Testcontainers-based dotnet test.
 - [ ] Run dotnet build MiniWalletPlatform.sln, the architecture tests, and docker compose config; commit.
 
 **Exit:** Consistent enforced boundaries and a usable local foundation; no business rules in host projects.
@@ -99,6 +101,7 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 - [ ] Import local player/admin accounts, default player role for signup, explicit mini-wallet-api audience mapping, and trusted admin permission mapping.
 - [ ] Configure public PKCE S256 clients, exact Swagger redirect URIs/Web Origins, API web-app CORS, disabled password grants, verified email, and Mailpit.
+- [ ] Add prompt=login to both Swagger OAuth configurations. Document clearing the current Swagger authorization before changing accounts; separate player/admin browser windows are an alternative. Verify an actual player-to-admin switch.
 - [ ] Implement the public issuer/internal metadata topology from the design, including reachable discovered JWKS. Do not weaken issuer/signature/audience/lifetime checks.
 - [ ] Test wrong issuer/audience, expired/unsigned/missing tokens, missing admin permission, and authenticated actors without a profile. Assert API authorization against milestone 2's real handlers.
 - [ ] Sign in through both Swagger UIs and prove the same browser token reaches both APIs. Check real signup/email verification; add these steps to README.
@@ -122,11 +125,12 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** Users.Worker, Users.Infrastructure/Outbox, Wallet.Worker, Wallet.Application/Features/Provisioning, Wallet.Infrastructure inbox/projection repositories and migrations, service Integration/Provisioning tests.
 
-- [ ] Publish one outbox row using SKIP LOCKED, persistent/durable routing, mandatory publication and a three-second confirm bound. Mark it published only on confirmation/commit; back off outside the transaction on failure.
+- [ ] Both workers idempotently declare the exchange, durable queue/binding and dead-letter topology before use, including reconnects; publisher startup must not depend on Wallet.Worker being running.
+- [ ] Publish one outbox row using SKIP LOCKED, persistent/durable routing, mandatory publication and a three-second confirm bound. Mark it published only after confirmation with no basic.return; a returned-then-confirmed message fails, rolls back the claim and retries with backoff outside the transaction.
 - [ ] Consume with prefetch 1/manual acknowledgement. Atomically commit inbox marker, identity projection and three zero USD/EUR/BTC wallets, then acknowledge.
 - [ ] Retain unacknowledged transient failures and retry with capped delay; avoid immediate nack/requeue loops. Retain malformed/conflicting messages in a dead-letter queue with a short diagnostic note.
 - [ ] Prove duplicate/restarted delivery does not reset an existing funded wallet. Prove all three wallets appear automatically after a new profile.
-- [ ] Use one representative outage scenario: create profiles while Wallet/broker is temporarily unavailable, restore it, and observe automatic recovery with one provisioning effect. Reuse the test in milestone 7.
+- [ ] Use one representative outage scenario: start with no broker queues declared and Wallet.Worker stopped, create profiles, restore dependencies, and observe automatic recovery with one provisioning effect. In the same fixture force an unroutable publish, assert its outbox row stays pending, restore routing and prove retry succeeds. Reuse this evidence in milestone 7.
 - [ ] Run the provisioning tests, update README pending/retry behaviour, and commit.
 
 **Exit:** Durable, independently hosted background processing provisions wallets without a separate wallet-creation call.
@@ -139,6 +143,7 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 - [ ] Add the two-column cursor, default 20/max 100, exact money strings, pending-provisioning 409 with Retry-After: 2, and consistent errors.
 - [ ] Test ownership/admin access, unknown resources, malformed/cross-player cursors, tied timestamps and appended history.
 - [ ] Document auth, all three transaction types, per-player idempotency scope, rejected attempts, pagination and the zero-to-funded demo.
+- [ ] Declare Idempotency-Key as a required transaction POST header in OpenAPI so Swagger Try it out shows the input; document where the profile response exposes PlayerId.
 - [ ] Run read API tests and commit.
 
 **Exit:** Reviewer can inspect successful transactions and explore every required API flow.
@@ -159,7 +164,7 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 **Files:** README.md, final deployment configuration, and design/roadmap updates.
 
 - [ ] From an isolated fresh Compose project/volumes, verify docker compose up --build. Preserve the user's existing volumes.
-- [ ] Follow the design's real demo: player signs in/creates profile → three zero wallets → admin BONUS USD 100 → player BET USD 10 → admin WIN USD 15 → USD 105 and three successful history entries. Replays preserve that result.
+- [ ] Follow the design's real demo: player signs in/creates profile → three zero wallets → admin BONUS USD 100 → player BET USD 10 → admin WIN USD 15 → USD 105 and three successful history entries. Explicitly switch Swagger accounts, copy PlayerId from the profile response and use the visible Idempotency-Key field. Replays preserve that result.
 - [ ] Exercise fresh signup/verification and confirm that new players get zero wallets. No startup profile/money fixture or password grant is involved.
 - [ ] Finish README local credentials/URLs, commands/tests, architecture, assumptions, IdP migration procedure, pending/outage behaviour, optional cuts, and actual incomplete requirements.
 - [ ] Prepare the interview walkthrough: transaction atomicity, outbox/inbox recovery, adding a transaction handler, and replacing identity-provider configuration/mapping.
