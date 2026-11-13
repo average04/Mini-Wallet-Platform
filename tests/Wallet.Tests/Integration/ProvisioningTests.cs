@@ -69,4 +69,17 @@ public sealed class ProvisioningTests(WalletDatabase database) : IClassFixture<W
         await using var db = database.Open();
         Assert.False(await db.Inbox.AnyAsync(x => x.EventId == message.EventId));
     }
+    [Theory]
+    [InlineData("subject")]
+    [InlineData("issuer")]
+    public async Task Embedded_null_identity_is_rejected_before_writing(string field)
+    {
+        var message = Message();
+        message = field == "subject" ? message with { Subject = "bad\0subject" }
+            : message with { Issuer = "https://issuer.test/bad\0issuer" };
+        await Assert.ThrowsAsync<InvalidProvisioningMessage>(() => Provision(message));
+        await using var db = database.Open();
+        Assert.False(await db.Inbox.AnyAsync(x => x.EventId == message.EventId));
+        Assert.False(await db.Wallets.AnyAsync(x => x.PlayerId == message.PlayerId));
+    }
 }

@@ -56,14 +56,19 @@ public sealed class ConsumerRecoveryTests : IAsyncLifetime
             }
             await Publish(channel, message);
             await Publish(channel, message with { EventId = Guid.NewGuid() });
+            await Publish(channel, message with { EventId = Guid.NewGuid(), Subject = "bad\0subject" });
+            var following = message with { EventId = Guid.NewGuid(), PlayerId = Guid.NewGuid(), Subject = Guid.NewGuid().ToString() };
+            await Publish(channel, following);
             // FIFO + prefetch 1 makes the poison DLQ entry a completion barrier for preceding deliveries.
             await channel.BasicPublishAsync("mini-wallet.events", "player.created.v1", true,
                 new BasicProperties { Persistent = true, Type = "player.created.v1", MessageId = Guid.NewGuid().ToString() }, Encoding.UTF8.GetBytes("{broken"), stop.Token);
-            await Eventually(async () => (await channel.QueueDeclarePassiveAsync("mini-wallet.provisioning.dead")).MessageCount == 1);
+            await Eventually(async () => (await channel.QueueDeclarePassiveAsync("mini-wallet.provisioning.dead")).MessageCount == 2);
             Assert.Equal(50, await database.BalanceAsync(message.PlayerId));
             await using var check = database.Open();
             Assert.Equal(3, await check.Wallets.CountAsync(x => x.PlayerId == message.PlayerId));
-            Assert.Equal(2, await check.Inbox.CountAsync());
+            Assert.Equal(3, await check.Inbox.CountAsync());
+            Assert.Equal(3, await check.Wallets.CountAsync(x => x.PlayerId == following.PlayerId));
+            Assert.All(await check.Wallets.Where(x => x.PlayerId == following.PlayerId).ToListAsync(), x => Assert.Equal(0, x.Balance));
         }
         finally
         {

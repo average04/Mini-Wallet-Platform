@@ -16,8 +16,8 @@ public sealed class ProvisionPlayer(IProvisioningStore store, IUnitOfWork unitOf
     public async Task ExecuteAsync(PlayerCreatedV1 message, CancellationToken cancellationToken = default)
     {
         if (message.EventId == Guid.Empty || message.PlayerId == Guid.Empty || message.OccurredAt == default
-            || string.IsNullOrWhiteSpace(message.Subject) || message.Subject.Length > 200
-            || string.IsNullOrWhiteSpace(message.Issuer) || message.Issuer.Length > 500
+            || string.IsNullOrWhiteSpace(message.Subject) || message.Subject.Length > 200 || message.Subject.Contains('\0')
+            || string.IsNullOrWhiteSpace(message.Issuer) || message.Issuer.Length > 500 || message.Issuer.Contains('\0')
             || !Uri.TryCreate(message.Issuer, UriKind.Absolute, out var issuer) || issuer.Scheme is not ("http" or "https"))
             throw new InvalidProvisioningMessage("Invalid player-created fields.");
         var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(message)));
