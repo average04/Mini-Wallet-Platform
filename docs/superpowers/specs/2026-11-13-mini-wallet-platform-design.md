@@ -1,136 +1,144 @@
 # Mini Wallet Platform — Design Baseline
 
 Date: 2026-11-13
-Status: planning baseline for review; no application has been implemented.
-Source: the candidate's supplied `candidate-brief-v2.md` and architecture discussion. The assessment document is reference material, not authorization to submit or contact anyone.
+Status: revised for Claude review, round 2; no application implementation.
+Source: the supplied candidate-brief-v2.md and architecture discussion. The assessment is reference material, not authorization to submit the work or contact anyone.
 
-## Purpose and scope
+## Purpose and limits
 
-Build a backend that demonstrates correctness, maintainability, and a repeatable service structure for a growing team. Target 8–10 focused hours and a solution the candidate can explain and extend during the interview. Deliver source with readable commits, tests, and a README with one-command startup and test-player/admin instructions. Submission is due one day before the interview; the interview date has not been supplied.
+Build exactly two business services, Users and Wallet, with an off-the-shelf identity provider. Demonstrate correct balances, a consistent structure for a growing team, and choices the candidate can explain and extend in the interview. Deliver source with readable commits, meaningful tests, and a README covering one-command startup and test player/admin accounts.
 
-Build exactly two business services: Users and Wallet. Run an existing identity provider. API and worker processes belong to their respective services; they are not additional business services.
+The brief asks for 8–10 focused hours, with submission one day before the interview; the interview date is unknown. The full core is estimated at 8–11.25 hours after the scope reductions below. This is a planning range, not a promise. Use a hard ten-hour implementation timebox, reserve the final hour for validation/documentation, and disclose unfinished requirements if the core still does not fit. Do not silently remove financial or authorization guarantees to meet an estimate.
 
-## Decisions from the discussion
+## Architecture decisions
 
-- Use full Clean Architecture in both services, with separate Domain, Application, Infrastructure, API, and Worker projects and identical conventions.
-- Use focused repository interfaces and a transaction/unit-of-work boundary. EF Core details stay in Infrastructure; repository methods do not independently commit parts of one use case.
-- Keep identity-provider concerns outside business logic. Validate standard JWT access tokens, normalize claims, and link external identities to stable platform player IDs.
-- Users owns profiles and identity associations. Wallet owns wallets and transaction history. Wallet resolves player identity from its local projection rather than calling Users on each request.
+- Full Clean Architecture in both services: separate Domain, Application, Infrastructure, API, and Worker projects with identical conventions.
+- Focused repository interfaces and a transaction boundary; infrastructure details stay out of business logic, and repository methods do not independently commit one use case's writes.
+- Stable platform PlayerIds, standard JWT access-token validation, and provider-specific claim mapping outside the business layers.
+- Users owns profiles and external-identity associations. Wallet owns balances/history and a local identity projection, avoiding a Users HTTP dependency on each wallet request.
 
-## Proposed defaults, not yet individually selected by the user
+The following are implementation proposals selected for this revised baseline, rather than claims that the user originally chose every detail:
 
-| Decision | Proposed default and reason |
+| Choice | Baseline |
 | --- | --- |
-| Runtime | .NET 10 LTS, ASP.NET Core, EF Core/Npgsql; satisfies the brief's .NET 8-or-later requirement. Pin supported compatible versions when implementing. |
-| Persistence | PostgreSQL: separate databases and credentials for Users and Wallet; a single database server is sufficient locally. Keycloak has its own database. |
-| Messaging | RabbitMQ, a Users transactional outbox, and a Wallet inbox for durable automatic provisioning. |
-| Identity provider | Keycloak with imported development configuration; Mailpit receives local verification emails. |
-| API tooling | Swagger UI with authorization code + PKCE on both services, FluentValidation, Problem Details errors, `/api/v1` routes. |
-| Tests | xUnit; domain/application unit tests and integration tests against real PostgreSQL/RabbitMQ. |
-| Provisioning semantics | A profile can be committed before its wallets exist. Provisioning resumes automatically after outages. Document this eventual-consistency interpretation explicitly. |
-| Demo funding | A development-only fixture credits an existing demo player's wallets with an auditable seed entry. Newly registered players still receive zero balances. There is no public funding endpoint. |
-| WIN rules | One successful WIN per BET for the core submission. A separate attempt to settle that BET again returns a conflict, even with a different idempotency key. Partial/multiple payouts are deferred. |
-| Currency rules | USD/EUR allow up to 2 fractional digits; BTC up to 8. Amounts must be positive and exactly representable; reject excess precision instead of rounding. No currency conversion. |
+| Runtime | Supported .NET 10 LTS SDK/runtime; ASP.NET Core and compatible EF Core/Npgsql versions pinned when implementing. |
+| Database | PostgreSQL; separate Users, Wallet, and Keycloak databases/credentials on one local server. |
+| Messaging | RabbitMQ, Users transactional outbox, Wallet idempotent inbox, and separate worker hosts. |
+| Identity | Keycloak realm import; Mailpit for local verification emails. |
+| APIs | Swagger UI with code + PKCE, FluentValidation, Problem Details, /api/v1. |
+| Tests | xUnit, Testcontainers PostgreSQL/RabbitMQ, two service test projects with unit/integration/architecture folders. |
+| Provisioning | Eventually consistent: profile creation commits first; wallet creation resumes automatically after temporary outages. |
+| Demo funding | Admin-only BONUS through the existing transaction endpoint. This small extra transaction type makes the demo fundable without startup seeding or a separate endpoint. |
+| WIN | One successful WIN per successful BET; a second settlement conflicts even with a new key. |
+| Money | Positive exact amounts; USD/EUR up to 2 fractional digits, BTC up to 8; reject excess precision, no conversion. |
 
-## Approaches considered
+Considered alternatives: outbox plus authenticated background HTTP delivery avoids a broker but adds receiver/auth/retry coordination. RabbitMQ is the baseline; changing transport is an explicit design revision, not a late untested shortcut. Synchronous Users-to-Wallet calls alone cannot protect a committed profile through a Wallet outage. Full event sourcing is unnecessary; retain current balances and append-only successful transaction history.
 
-1. **Outbox + RabbitMQ + independent workers — recommended baseline.** One additional infrastructure component, explicit delivery acknowledgements, and straightforward future subscribers.
-2. **Outbox + background HTTP delivery.** Fewer containers, but requires a service-authenticated receiver and custom delivery/retry coordination. Viable if broker setup threatens the time budget; changing to it is an explicit design revision, not silently removing durability.
+## Projects and dependencies
 
-Simple synchronous Users-to-Wallet calls alone do not handle a committed profile followed by a Wallet outage. Full event sourcing, a gateway, service mesh, Kubernetes, and a frontend do not serve the required core within this time budget. Persist current balances and append-only transaction history.
+    src/Contracts/                         # versioned event DTOs, no shared entities
+    src/Users/Users.Domain/
+    src/Users/Users.Application/            # Abstractions + Features/<UseCase>
+    src/Users/Users.Infrastructure/
+    src/Users/Users.Api/
+    src/Users/Users.Worker/
+    src/Wallet/Wallet.Domain/
+    src/Wallet/Wallet.Application/
+    src/Wallet/Wallet.Infrastructure/
+    src/Wallet/Wallet.Api/
+    src/Wallet/Wallet.Worker/
+    tests/Users.Tests/                      # Unit, Integration, Architecture
+    tests/Wallet.Tests/                     # Unit, Integration, Architecture
+    deploy/                                # Dockerfiles and local IdP/infrastructure
 
-## Service structure and dependency rules
+This is 13 projects, including Contracts and the two test projects. Domain has no HTTP/infrastructure dependencies. Application references Domain and defines persistence/current-actor ports. Infrastructure implements these ports. API and Worker register Infrastructure at their composition roots and invoke Application use cases. HTTP-specific current-actor access belongs in API; claim mapping/resolution sits behind Application abstractions.
 
-```text
-src/
-  Contracts/                         # versioned integration-event DTOs only
-  Users/
-    Users.Domain/
-    Users.Application/               # Abstractions and Features/<UseCase>
-    Users.Infrastructure/
-    Users.Api/
-    Users.Worker/
-  Wallet/
-    Wallet.Domain/
-    Wallet.Application/
-    Wallet.Infrastructure/
-    Wallet.Api/
-    Wallet.Worker/
-tests/
-  Architecture.Tests/
-  Users.Tests/                       # Unit/ and Integration/ folders
-  Wallet.Tests/                      # Unit/ and Integration/ folders
-  Platform.AcceptanceTests/
-deploy/                              # containers, Keycloak import, local infrastructure
-```
+Each service gets the same dependency-rule checks in its existing test project. Do not share entities, DbContexts, or repositories between services. Keep BET, WIN, and BONUS handlers separate behind one execution pipeline. A mediator package, generic repository framework, dedicated architecture-test project, and separate platform acceptance project are unnecessary.
 
-Domain has no infrastructure or HTTP dependencies. Application references Domain and defines persistence/current-actor ports. Infrastructure implements these ports. API and Worker are composition roots: they register Infrastructure but execute Application use cases. HTTP-specific current-actor access belongs in API, while claim normalization and identity resolution sit behind application abstractions. Workers execute explicitly scoped system operations, not forged HTTP principals.
+## Authentication and provider replacement
 
-Share event contracts, not entities, DbContexts, business repositories, or databases. Enforce project dependencies with an architecture test. Use feature folders within Application and keep BET/WIN handling independently extensible behind the single transaction endpoint. Do not require a mediator library or a generic CRUD framework.
+Keycloak owns signup, login, passwords, email verification, resets, and token issuance. Business services expose no login, credential-proxy, or verification endpoints. Both APIs validate signature, issuer, audience, and lifetime using ASP.NET Core JWT bearer middleware and discovery/JWKS. ID tokens are not accepted as API access tokens.
 
-## Authentication and stable identity
+Use an explicitly configured platform audience, mini-wallet-api, in both APIs. Keycloak's public clients must issue that audience, enable authorization code + PKCE S256, disable password grants, and use exact redirect URIs. Configure the client Web Origins for both Swagger origins; this enables browser token exchange. Separately configure API CORS for the future web-app origin. New registrations receive the player role. Normalize permitted nested provider roles into platform permissions, including Profiles.ManageAny, Wallets.ReadAny, Wallets.RecordWin, and Wallets.GrantBonus. Test the same browser-issued access token against both APIs.
 
-- Keycloak owns signup, login, credentials, verification, password resets, and token issuance. Neither business service exposes login/password/email-verification endpoints.
-- Both APIs validate access-token signature, trusted issuer, audience, and lifetime using ASP.NET Core JWT bearer middleware and OIDC discovery/JWKS. Only configured issuers are trusted. ID tokens are not API access tokens.
-- Browser clients and both interactive API docs use authorization code + PKCE. Disable password grant for those clients. Configure an explicit platform API audience (or both service audiences) so the same browser-issued access token is valid in Users and Wallet. Permit only configured local browser origins through CORS. Use a canonical issuer and reachable discovery/key endpoints that work from both the host browser and containers; prove this through an actual browser sign-in. Do not disable issuer validation to solve Docker networking.
-- Normalize explicitly permitted provider roles to platform permissions such as `Profiles.ManageAny`, `Wallets.ReadAny`, and `Wallets.RecordWin`. Preserve current token authorization checks on every request, including idempotent replays.
-- Link `(issuer, subject)` to a platform-generated `PlayerId`. Before profile creation the authenticated actor has an external identity and permissions but no PlayerId. Signup/profile creation requires a trusted verified-email claim.
-- `PlayerCreatedV1` carries the platform player ID and external-identity association. Wallet stores its local lookup in the same transaction as the three wallets. An unresolved player cannot access someone else's wallets.
-- For future provider changes, add verified identity associations to the existing PlayerId; never auto-link by email. Define an internal Users application command `LinkExternalIdentityCommand(PlayerId, Issuer, Subject)` that atomically commits the unique association and a `PlayerIdentityLinkedV1` outbox event, plus its idempotent Wallet consumer. This is an operator-controlled action requiring independently verified account ownership, not a public player endpoint. The take-home invokes this application path in an integration test and documents the operator migration procedure; a public account-linking feature, operator CLI/UI, and second live IdP are deferred. This is additive linking; retiring the old issuer is a separate controlled configuration cutover, not automatic unlinking.
-- Identity-linked events can arrive before player-created events: store the association independently, but do not provision wallets or permit transactions until the PlayerCreated event is applied. Conflicting associations are quarantined, not reassigned.
+For the local Docker setup, propose a fixed browser-facing Keycloak hostname of http://localhost:8080 with hostname-backchannel-dynamic enabled. APIs fetch discovery from the internal keycloak:8080 address while validating the public realm issuer. Verify that the discovered JWKS URL is also reachable inside containers: changing MetadataAddress alone does not solve an unreachable jwks_uri. Browser authorization/token URLs remain browser-reachable. Local HTTP metadata is development-only; issuer/signature/audience/lifetime validation remains enabled. The pinned Keycloak version must pass this actual browser/container smoke check. See [Keycloak hostname guidance](https://www.keycloak.org/server/hostname).
 
-## API contract baseline
+Map the exact pair (issuer, subject) to a platform-generated PlayerId. Before profile creation the current actor has external identity/permissions but no PlayerId. A verified-email claim is required to create a profile. Admin operations do not require the admin to have a player profile. PlayerCreatedV1 includes the platform ID and external association; Wallet commits its local lookup with the three wallets.
 
-| Service | Endpoint | Access and result |
+Preserve a many-to-one identity-association model, with unique (issuer, subject) and an association to an existing player. A focused Users integration test can insert two verified associations and prove both resolve to the same PlayerId. Do not automatically link accounts by email.
+
+Provider migration is documented, not implemented as a live feature: independently verify old/new accounts, add associations to the existing platform IDs in Users, update Wallet's local identity projection through a controlled migration, verify both services resolve the original owners, then cut over configured issuers/claim mapping and retire the old issuer. No profile, balance, or transaction IDs change. The migration must not be declared complete while the services disagree. Live linking commands/events, an additional consumer, ordering/replay machinery, operator tooling, and a second live IdP are deferred. The core demonstrates the replaceable boundary, not a complete migration product.
+
+## API contract
+
+| Service | Endpoint | Behaviour |
 | --- | --- | --- |
-| Users | `POST /api/v1/profiles` | Verified player; create own profile, 201 + Location. Requires Idempotency-Key. |
-| Users | `GET/PUT /api/v1/profiles/me` | Own profile; 200; missing profile 404. |
-| Users | `GET/PUT /api/v1/profiles/{playerId}` | Admin only; 200; missing profile 404. |
-| Wallet | `POST /api/v1/transactions` | Single endpoint dispatches BET or WIN; 201 + transaction result. Requires Idempotency-Key. |
-| Wallet | `GET /api/v1/wallets/me` | Player's balances; 200, or 409 `player_not_provisioned` until identity/wallet provisioning completes. |
-| Wallet | `GET /api/v1/transactions/me` | Player's cursor-paginated history; same provisioning rule. |
-| Wallet | `GET /api/v1/players/{playerId}/wallets` | Admin balances; 200; unknown player 404. |
-| Wallet | `GET /api/v1/players/{playerId}/transactions` | Admin cursor-paginated history; unknown player 404. |
+| Users | POST /api/v1/profiles | Verified player creates own profile: 201 + Location. Repeat for the same identity: 200 + Location to the existing profile; never creates another event or updates it. No Idempotency-Key required. |
+| Users | GET/PUT /api/v1/profiles/me | Own profile; 200, missing 404. |
+| Users | GET/PUT /api/v1/profiles/{playerId} | Admin profile access; 200, missing 404. |
+| Wallet | POST /api/v1/transactions | One endpoint for BET/WIN/BONUS; Idempotency-Key required; success 201 + result + Location. |
+| Wallet | GET /api/v1/transactions/{transactionId} | Owner or admin; otherwise 404; returns only successful transactions. |
+| Wallet | GET /api/v1/wallets/me | Own balances; 409 player_not_provisioned with Retry-After: 2 until provisioned. |
+| Wallet | GET /api/v1/transactions/me | Own cursor-paginated history; same provisioning response. |
+| Wallet | GET /api/v1/players/{playerId}/wallets | Admin balances; unknown player 404. |
+| Wallet | GET /api/v1/players/{playerId}/transactions | Admin history; unknown player 404. |
 
-Profile data is a display name (1–100 trimmed characters); additional platform profile fields are optional. Credentials, identity associations, roles, and verification flags are not editable profile fields.
+Profile data is a trimmed display name of 1–100 characters. Credentials, roles, external associations, and verification flags cannot be changed through profile updates. POST means create-if-absent: a retry returns the current profile even if its submitted display name differs; use PUT to edit. PUT fully replaces editable profile fields.
 
-BET input: `type`, `currency`, `amount`. Determine the player from the token's resolved identity. WIN input: `type`, `betId`, `amount`; resolve the target player and currency from the original successful BET. Reject incompatible/unknown transaction fields and unknown types. An admin-only identity cannot place bets for other players; an actor with a player identity can only bet for itself.
+Transaction inputs:
+- BET: type, currency, amount. Player comes from the authenticated actor; no caller-selected playerId.
+- WIN: type, betId, amount. Admin only; player/currency come from an earlier successful BET.
+- BONUS: type, playerId, currency, amount. Admin only; credit an already provisioned target wallet, with actor and target in the audit record. This is a simulated promotional credit, not a payment/deposit integration.
+Reject unknown types, unknown fields, and fields incompatible with the chosen type. All credits require the corresponding admin permission; no player-only token can credit a wallet.
 
-Represent monetary values as invariant decimal strings in JSON to avoid browser number precision loss. Use C# decimal and PostgreSQL numeric(28,8), with currency-specific scale validation and checked range handling for amounts and resulting balances. Serialize timestamps as UTC ISO 8601. History sorts by `(createdAt, transactionId)` descending; cursor contains both, is validated against filters/player, and has default page size 20 and maximum 100.
+Monetary JSON values are invariant decimal strings. Use C# decimal and PostgreSQL numeric(28,8), validate scale/range before storage, and check resulting balance limits. Timestamps are UTC ISO 8601. History is ordered by (createdAt, transactionId) descending; cursor contains both, is bound to player/filters, and has default page size 20 and maximum 100.
 
-Use consistent Problem Details with a stable `code` and trace ID. 400 for invalid input; 401 for missing/invalid authentication; 403 for insufficient permission; 404 for inaccessible/missing referenced resources as appropriate; 409 for insufficient funds, duplicate settlement, mismatched idempotency payload, balance limits, or unprovisioned wallets; 503 for retryable infrastructure unavailability. OpenAPI includes request/response examples, permissions, PKCE instructions, pagination, and retry semantics. All business HTTP endpoints require bearer authentication; docs/sign-in assets are public, and infrastructure liveness checks do not become public business endpoints.
+Use Problem Details with stable code and trace ID: 400 invalid input; 401 unauthenticated/invalid token; 403 insufficient permission; 404 inaccessible/missing referenced transaction or resource; 409 insufficient funds, duplicate WIN, conflicting in-scope idempotency payload, balance limit, or pending provisioning; 503 retryable infrastructure failure. Docs/sign-in assets are public; all business HTTP endpoints require bearer authentication. Infrastructure health checks do not create unauthenticated business routes.
 
-## Correctness and durability
+## Atomicity, concurrency, and retries
 
-**Profile creation:** in one Users transaction, create the profile, its unique external association, the durable idempotency result, and a PlayerCreated outbox event. Same-key/same-payload retries replay the response; a new key for the same registered identity returns a conflict without a new profile or event. PUT is a full deterministic replacement of the editable profile fields.
+**Profiles:** atomically insert the profile, unique identity association, and PlayerCreated outbox record. Concurrent duplicate POSTs resolve through the uniqueness constraint to one profile/event; the losing attempt returns the existing profile. A lost HTTP response is recovered by repeating POST. No separate Users idempotency store is needed.
 
-**Outbox and consumer:** workers claim work with short database leases suitable for multiple instances. Publish persistent messages to durable queues with publisher confirms and routing-failure handling; mark published only after confirmation. A crash between publish and marking can duplicate delivery. Wallet commits the inbox marker, identity projection, and all three unique `(playerId, currency)` wallets together, then acknowledges. Redelivery cannot reset a funded wallet to zero. During transient database/broker outages, keep work durable and retry automatically with capped backoff; reaching a retry count must not strand it awaiting manual action. Quarantine only poison/invalid messages and ownership conflicts in a visible dead-letter queue with documented replay. Expired worker leases are reclaimable. Broker I/O does not run inside a wallet database transaction.
+**Wallet operations:** authorize before looking up a replay; open one transaction, reserve/resolve the idempotency key, lock the target wallet row, check business rules, append a successful history entry, update balance, and store the result before commit. Use SELECT FOR UPDATE consistently; the row lock spans the balance read and update across API instances. WIN also verifies an existing successful BET and enforces unique settlement in the database. No network I/O inside wallet transactions. Add nonnegative-balance and positive-transaction-amount constraints.
 
-**BET/WIN:** enforce authorization before replay lookup; open one short database transaction, reserve/resolve the idempotency key, lock the target wallet row, check rules, append history, change balance, and store the result before committing. The lock covers the balance read and write across all API instances. WIN additionally verifies the original BET and enforces unique settlement in the database. Keep network calls outside the transaction. Add database checks for nonnegative balances and positive transaction amounts.
+**History:** only successful BET/WIN/BONUS operations become transaction rows. Rejected attempts such as insufficient funds are retained only as idempotency results, never as debit/history rows or WIN-eligible BETs. Starting from zero, balance equals the signed sum of committed history.
 
-**Idempotency:** wallet operation keys are scoped to `(targetPlayerId, wallet.transactions.v1, key)` so identity-provider migration does not change the retry scope. Audit the actual authenticated actor separately. Fingerprint canonical validated business fields; equivalent decimal spellings normalize to the same value. Profile keys use `(issuer, subject, profiles.create.v1, key)` before a platform ID exists. Same key/different canonical payload is 409. Concurrent duplicates produce one effect and replay one durable response. Deterministic business rejections after reservation, such as insufficient funds, are retained as results; authentication/input failures and transient infrastructure failures are not cached. A different authorized attempt after funds change needs a new key. Keep keys for the life of the take-home data.
+**Idempotency scope:** (targetPlayerId, wallet.transactions.v1, key). Keys are unique per target player, not globally or per admin. An admin may use the same key for different players as separate operations; document this explicitly. Within one target-player scope, the same key and canonical payload returns the original status/result/Location; different payload returns 409. Currency, type, normalized amount and bet/target identifiers participate in the fingerprint. Equivalent decimal spellings normalize. Authorization is checked afresh even on replay; audit records retain the original actor. Concurrent duplicates have one effect. Retain deterministic business failures after reservation, but not authentication/validation errors or transient infrastructure failures. A new business attempt after funds change needs a new key. Retain keys for the lifetime of the take-home data.
 
-**Outage boundary:** a committed operation is durable and retryable without duplication even if its HTTP response is lost. A request that never reaches a running service is not accepted and must be retried by the client. Profile creation returns the created profile, not a promise that Wallet has already finished. Reads while provisioning return the documented pending conflict rather than fabricated zero balances.
+**Users publisher:** use SELECT FOR UPDATE SKIP LOCKED to claim one pending outbox row in a transaction, publish a persistent message with mandatory routing and a publisher confirm, then mark published and commit. No lease table. A crash after publish but before commit can redeliver; the inbox makes this safe. Limit broker confirmation to three seconds, roll back/release the outbox lock on failure, then back off outside the transaction (1, 2, 4, 8, 16, up to 30 seconds). This deliberately holds only an outbox-row lock over a bounded broker exchange, never a profile/wallet lock. It is a small-system trade-off to document; fail fast on a broken connection.
 
-## Runtime and demo
+**Wallet consumer:** durable queue, manual acknowledgements, prefetch 1 per worker. In one transaction commit the inbox marker, local identity lookup, and exactly one zero wallet per USD/EUR/BTC. Acknowledge only after commit. Redelivery cannot recreate/reset a funded wallet. During a transient DB failure, retain the delivery unacknowledged and retry the whole DB transaction with capped backoff; do not immediately nack/requeue in a tight loop. Shutdown closes the channel so unacknowledged work is redelivered. Transient outages never exhaust into a manual-only queue. Reject malformed/conflicting messages to a retained dead-letter queue and log the reason; automated poison-message repair/replay tooling is deferred.
 
-`docker compose up --build` must start the application from a clean checkout: Users API/Worker, Wallet API/Worker, PostgreSQL, RabbitMQ, Keycloak, Mailpit, and controlled one-shot database initialization. Introduce container startup in the foundation milestone and each service's migrations alongside its first persistence feature; do not leave runtime assembly to the last milestone. Separate API and worker entrypoints and migrations prevent every API replica racing to migrate.
+**Outage boundary:** accepted means committed. A committed operation survives restart and a lost response; a request that never reaches a live service must be retried by the client. Profile 201 confirms the profile, not finished Wallet provisioning. Pending reads return the documented retryable conflict, not fabricated balances.
 
-Import local-only test player/admin identities and roles. Make the demo player's profile and wallets available through the same provisioning flow, then apply one stable, idempotent, development-only seed credit with visible history. New profiles still start at zero. Document local credentials, verification-mail UI, sign-in steps, and an end-to-end BET/WIN example. Keep real credentials and tokens out of source and logs. Docker volumes preserve state across ordinary restarts; a destructive reset is a separate explicit operator action.
+## Startup and usable demo
 
-## Validation and non-goals
+Start all hosts and dependencies with docker compose up --build from a clean checkout: Users API/Worker, Wallet API/Worker, PostgreSQL, RabbitMQ, Keycloak, Mailpit, and one-shot schema initialization. Start container wiring in the foundation milestone; add migrations with each feature. Do not have each API replica race to migrate. Persist ordinary restarts with volumes.
 
-Prove concurrent debits, duplicate request/event delivery, permission isolation, one WIN per BET, currency boundaries, lost responses, process restarts, and service/broker outages against real dependencies. Unit tests cover business rules; mocks do not prove locking or transaction atomicity. Each guarantee gets one representative integration scenario reused by the final acceptance run, not a duplicate suite for every host/process permutation. Verify additive identity linking through the Users application command, durable delivery, and both services' identity resolution while preserving the same platform player and balances. Perform a real PKCE sign-in in both API docs, prove the same token works across them, and exercise fresh signup/email verification.
+Keycloak imports local test player/admin accounts and roles; it does not create platform profiles or balances. There is no background demo-money seed. The README walks the reviewer through:
+1. Start Compose and sign in as the verified test player through Swagger PKCE.
+2. POST the player's profile; wait for the Wallet API's provisioning response to become ready.
+3. Confirm USD, EUR, and BTC all start at zero.
+4. Sign in as admin and submit BONUS for USD 100 using that PlayerId and a documented key.
+5. Sign in as player and BET USD 10 with a new key; balance becomes USD 90.
+6. Sign in as admin and WIN USD 15 against that successful BET; balance becomes USD 105.
+7. Inspect the three successful history entries and replay each request with its original key to prove no repeated effect.
+8. Register a fresh player at Keycloak, verify through Mailpit, create its profile, and confirm three zero wallets.
 
-Defer SignalR, a React/Next frontend, extra transaction types, production deployment, account migration tooling/UI, a second live IdP, exhaustive chaos/replica matrices, and elaborate generic frameworks. Reserve time for the README and interview explanation. The 8–10-hour target is ambitious from an empty repository: prioritize one demonstrable path per required guarantee, track elapsed time, and explicitly record unfinished requirements rather than claiming complete coverage. The time budget is an estimate, not a claim that all proposed infrastructure has already been tested.
+Tests may insert wallet/identity fixtures directly into their isolated databases to prove money handling before profile messaging exists. That is test setup, not the runtime demo. Real secrets/tokens do not belong in source or logs.
 
-## Reference guidance
+## Verification and deliberate scope cuts
+
+Use two WebApplicationFactory hosts sharing Testcontainers PostgreSQL for cross-instance wallet correctness; a load balancer demo is unnecessary. Testcontainers start test dependencies, so dotnet test does not require the application Compose stack to be running. Use one representative scenario per guarantee, not duplicate service/platform suites. Required checks include concurrent debits, same-key replay, separate-key duplicate WIN, unauthorized credits/access/replays, precision limits, atomic profile/event creation, duplicate provisioning, automatic outage recovery, and a real PKCE/signup demo.
+
+Cuts already applied: live identity-link command/event/consumer and second IdP; separate architecture/platform test projects; custom lease table; startup money seed; exhaustive crash/replica matrices. Defer SignalR, frontend, further transaction types beyond demo BONUS, production deployment, poison-message replay tooling, and migration UI. The roadmap ranks remaining cuts and checkpoints. Do not cut the required two-instance concurrency, basic duplicate/outage tests, authorization, or durable transaction boundaries.
+
+## References
 
 - [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy)
 - [Clean Architecture](https://learn.microsoft.com/en-us/dotnet/architecture/modern-web-apps-azure/common-web-application-architectures)
-- [Repository and unit of work](https://learn.microsoft.com/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/infrastructure-persistence-layer-design)
-- [JWT bearer validation](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-jwt-bearer-authentication)
+- [Repository/unit of work](https://learn.microsoft.com/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/infrastructure-persistence-layer-design)
+- [JWT validation](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-jwt-bearer-authentication)
 - [OIDC identity stability](https://www.openid.net/specs/openid-connect-core-1_0.html#ClaimStability)
-- [Transactional outbox](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/multi-container-microservice-net-applications/subscribe-events)
-- [RabbitMQ delivery guarantees](https://www.rabbitmq.com/docs/reliability)
-- [PostgreSQL row locking](https://www.postgresql.org/docs/current/explicit-locking.html)
+- [RabbitMQ delivery](https://www.rabbitmq.com/docs/reliability)
+- [PostgreSQL locking](https://www.postgresql.org/docs/current/explicit-locking.html)
