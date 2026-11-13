@@ -50,11 +50,14 @@ public sealed class ExecuteTransaction(
             try
             {
                 await handler.ApplyAsync(wallet, money, target, cancellationToken);
+                // PostgreSQL stores microseconds; return and persist the same timestamp.
+                var now = DateTimeOffset.UtcNow;
+                var createdAt = new DateTimeOffset(now.Ticks - now.Ticks % 10, TimeSpan.Zero);
                 var entry = new LedgerEntry
                 {
                     Id = Guid.NewGuid(), PlayerId = target.PlayerId, Currency = target.Currency, Kind = handler.Type,
                     Amount = money.Amount, BalanceAfter = wallet.Balance, BetId = target.BetId,
-                    ActorIssuer = actor.Issuer, ActorSubject = actor.Subject, CreatedAt = DateTimeOffset.UtcNow
+                    ActorIssuer = actor.Issuer, ActorSubject = actor.Subject, CreatedAt = createdAt
                 };
                 transactions.Add(entry);
                 outcome = TransactionOutcome.Success(entry);

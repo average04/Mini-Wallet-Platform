@@ -16,9 +16,11 @@ public static class DependencyInjection
                 postgres => postgres.CommandTimeout(10)));
         services.AddScoped<IIdentityRepository, IdentityRepository>();
         services.AddScoped<IWalletRepository, WalletRepository>();
+        services.AddScoped<MiniWallet.Wallet.Application.Features.Reads.IWalletReadRepository, WalletReadRepository>();
         services.AddScoped<ITransactionRepository, TransactionRepository>();
         services.AddScoped<IIdempotencyRepository, IdempotencyRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<MiniWallet.Wallet.Application.Features.Provisioning.IProvisioningStore, ProvisioningStore>();
         return services;
     }
 }

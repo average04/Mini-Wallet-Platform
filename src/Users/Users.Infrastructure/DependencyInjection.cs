@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<IProfileRepository, ProfileRepository>();
         services.AddScoped<IPlayerEventOutbox, PlayerEventOutbox>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<MiniWallet.Users.Application.Features.Outbox.IOutboxQueue, OutboxQueue>();
         return services;
     }
 }

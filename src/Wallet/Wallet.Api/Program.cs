@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using MiniWallet.Wallet.Api.Auth;
+using MiniWallet.Wallet.Api.Endpoints;
+using MiniWallet.Wallet.Application.Features.Reads;
 using MiniWallet.Wallet.Application.Features.Transactions;
 using MiniWallet.Wallet.Infrastructure;
 using MiniWallet.Wallet.Infrastructure.Persistence;
@@ -18,6 +20,7 @@ public partial class Program
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow);
         builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
         builder.Services.AddScoped<ExecuteTransaction>();
+        builder.Services.AddScoped<WalletQueries>();
         builder.Services.AddScoped<TransactionRequestValidator>();
         builder.Services.AddScoped<ITransactionHandler, BetHandler>();
         builder.Services.AddScoped<ITransactionHandler, WinHandler>();
@@ -37,6 +40,7 @@ public partial class Program
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous().ExcludeFromDescription();
+        app.MapWalletReads();
         app.MapPost("/api/v1/transactions", async (TransactionRequest request,
             [FromHeader(Name = "Idempotency-Key")] string key, HttpContext context,
             ExecuteTransaction execute, CancellationToken cancellationToken) =>
