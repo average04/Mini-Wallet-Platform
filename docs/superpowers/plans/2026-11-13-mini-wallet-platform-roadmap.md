@@ -10,7 +10,7 @@
 
 **Spec:** [Design baseline](../specs/2026-11-13-mini-wallet-platform-design.md). Claude approved the revised design/roadmap at commit 4200919 in Collidr round 2; its non-blocking implementation notes are folded into the milestones below. Runtime/infrastructure choices remain documented implementation proposals.
 
-**Status:** Implemented 2026-11-13 on codex/implement-mini-wallet. Stable SDK 10.0.404 and runtime 10.0.15 pinned. Automated suite: 89 passed. Fresh isolated Compose startup and real PKCE/signup/zero-to-105/replay browser acceptance passed. Final code review and handoff verification are in progress.
+**Status:** Implemented 2026-11-13 on codex/implement-mini-wallet. Stable SDK 10.0.404 and runtime 10.0.15 pinned. Automated suite: 91 passed. Fresh isolated Compose startup and real PKCE/signup/zero-to-105/replay browser acceptance passed. Fresh independent review completed; its important poison-message finding was fixed with failing-then-passing regressions and a green full suite. Handoff verification complete.
 
 ## Global constraints
 
@@ -168,7 +168,7 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 - [x] Exercise fresh signup/verification and confirm that new players get zero wallets. No startup profile/money fixture or password grant is involved.
 - [x] Finish README local credentials/URLs, commands/tests, architecture, assumptions, IdP migration procedure, pending/outage behaviour, optional cuts, and actual incomplete requirements.
 - [x] Prepare the interview walkthrough: transaction atomicity, outbox/inbox recovery, adding a transaction handler, and replacing identity-provider configuration/mapping.
-- [ ] Inspect for secrets/temp artifacts, run final appropriate checks after changes, and commit. Publishing/submitting remains a separate user action.
+- [x] Inspect for secrets/temp artifacts, run final appropriate checks after changes, and commit. Publishing/submitting remains a separate user action.
 
 **Exit:** A reviewer can reproduce the demo and the candidate can explain the trade-offs within the timebox.
 
@@ -179,4 +179,27 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 - [x] Automatic zero wallets, correct multi-instance balances, durable accepted work, safe retries, and separate workers have meaningful evidence.
 - [x] Real PKCE works in both API docs with one token; credentials stay with the IdP.
 - [x] One-command startup, working admin-funded demo, source/history, tests and accurate README are delivered.
-- [ ] Actual elapsed work, assumptions, cuts, test results, and any unmet requirements are disclosed.
+- [x] Actual elapsed work, assumptions, cuts, test results, and any unmet requirements are disclosed.
+
+## Execution record
+
+The required backend scope is implemented and verified. Final suite: **91 passed, zero failed/skipped**. The real browser demo ran in an isolated fresh Compose project: new registration, Mailpit verification, PKCE, automatic zero wallets, admin BONUS 100, player BET 10, admin WIN 15, balance 105, three history entries, and safe replay of all three requests. The normal local stack was restored without deleting either project's volumes.
+
+A fresh independent whole-branch review found one important issue and no critical/minor issues: a valid envelope with an embedded NUL in an identity could retry forever and block provisioning. Two application cases and a real-broker regression failed first; rejecting invalid identity text before the transaction made all pass. The broker regression also verifies that a following healthy player is provisioned. Transient storage failures retain their existing retry behavior.
+
+Implementation decisions, in the order recorded:
+
+| Decision | Reason and trade-off |
+| --- | --- |
+| Reuse the requested D:/Projects checkout on a feature branch. | Honors the chosen location and desktop checkout preference; main remains unchanged, but no additional worktree isolates concurrent local edits. |
+| Maintain milestone briefs and verification records directly. | The plan helper accepted Task headings but the approved plan used Milestone headings; equivalent test gates were preserved, with manual bookkeeping instead of helper automation. |
+| Install verified SDK 10.0.404 under ignored .tools and pin runtime/packages. | The installed stable SDK was older; local tooling uses additional disk space and its path is documented. Compose builds independently. |
+| Explicitly pin the runtime EF Relational dependency. | A private design-time dependency otherwise allowed a mismatched transitive runtime version; the selected package set is verified together and needs coordinated upgrades. |
+| Commit provisioning and read milestones together. | Read dependency wiring landed while the worker build was running; the resulting commit is coherent and runnable but larger to review. |
+| Keep production TLS, secret rotation and replicated disaster recovery deferred. | Explicitly approved local-backend scope; the local setup must be hardened before production use. |
+| Keep live identity-linking and automated provider migration deferred. | Stable IDs, multiple associations and a controlled migration procedure are implemented/documented; a real cutover still requires operator work. |
+| Keep automated poison repair/replay deferred. | Correct poison detection and retained dead-letter storage are covered; investigation and replay remain manual. |
+| Keep exhaustive crash/load permutations deferred. | Real dependency failures and representative two-host/concurrency cases are covered; untested production loads still need validation. |
+| Keep the feature branch committed locally. | Implementation was authorized; publishing, submitting or merging was not requested. Integration remains a separate action. |
+
+No deferred minor review findings. Optional frontend/SignalR features remain outside the agreed core. See README for commands, credentials, precise behavior and elapsed session time.
