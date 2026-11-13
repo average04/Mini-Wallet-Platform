@@ -8,6 +8,7 @@ public sealed record Actor(string Issuer, string Subject, bool EmailVerified, IR
 public interface IIdentityRepository
 {
     Task<Guid?> ResolvePlayerAsync(string issuer, string subject, CancellationToken cancellationToken);
+    void Add(Guid playerId, string issuer, string subject);
 }
 
 public interface IUnitOfWork

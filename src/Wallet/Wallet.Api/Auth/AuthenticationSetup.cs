@@ -42,7 +42,8 @@ public static class AuthenticationSetup
                 OnForbidden = context => ApiErrors.Problem(403, "forbidden", context.HttpContext).ExecuteAsync(context.HttpContext)
             };
         });
-        services.AddAuthorization();
+        services.AddAuthorization(options => options.FallbackPolicy =
+            new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
         return services;
     }
 }

@@ -1,4 +1,14 @@
 name: mini-wallet
+x-auth: &auth
+  ASPNETCORE_ENVIRONMENT: Development
+  Auth__Issuer: http://localhost:8080/realms/mini-wallet
+  Auth__PublicIssuer: http://localhost:8080/realms/mini-wallet
+  Auth__Audience: mini-wallet-api
+  Auth__MetadataAddress: http://keycloak:8080/realms/mini-wallet/.well-known/openid-configuration
+x-broker: &broker
+  Broker__Host: rabbitmq
+  Broker__Username: wallet
+  Broker__Password: local-rabbit
 services:
   postgres:
     image: postgres:17.9
@@ -24,16 +34,86 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    ports: ["127.0.0.1:8025:8025"]
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
+      KC_DB_USERNAME: keycloak_app
+      KC_DB_PASSWORD: local-keycloak
+      KC_BOOTSTRAP_ADMIN_USERNAME: keycloak-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: LocalKeycloak123!
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports: ["127.0.0.1:8080:8080"]
+    volumes:
+      - ./deploy/keycloak/mini-wallet-realm.json:/opt/keycloak/data/import/mini-wallet-realm.json:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      mailpit: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
+      interval: 5s
+      timeout: 3s
+      start_period: 40s
+      retries: 30
+  init-wallet:
+    build: {context: ., dockerfile: deploy/Dockerfile, args: {SERVICE: Wallet, HOST: Api}}
+    command: ["--migrate"]
+    environment:
+      <<: *auth
+      ConnectionStrings__Database: Host=postgres;Database=wallet_db;Username=wallet_app;Password=local-wallet;Timeout=3
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+  init-users:
+    build: {context: ., dockerfile: deploy/Dockerfile, args: {SERVICE: Users, HOST: Api}}
+    command: ["--migrate"]
+    environment:
+      <<: *auth
+      ConnectionStrings__Database: Host=postgres;Database=users_db;Username=users_app;Password=local-users;Timeout=3
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
   users-api:
     build: {context: ., dockerfile: deploy/Dockerfile, args: {SERVICE: Users, HOST: Api}}
-    ports: ["5101:8080"]
+    ports: ["127.0.0.1:5101:8080"]
+    environment:
+      <<: *auth
+      ConnectionStrings__Database: Host=postgres;Database=users_db;Username=users_app;Password=local-users;Timeout=3
+    depends_on:
+      init-users: {condition: service_completed_successfully}
+      keycloak: {condition: service_healthy}
   wallet-api:
     build: {context: ., dockerfile: deploy/Dockerfile, args: {SERVICE: Wallet, HOST: Api}}
-    ports: ["5102:8080"]
+    ports: ["127.0.0.1:5102:8080"]
+    environment:
+      <<: *auth
+      ConnectionStrings__Database: Host=postgres;Database=wallet_db;Username=wallet_app;Password=local-wallet;Timeout=3
+    depends_on:
+      init-wallet: {condition: service_completed_successfully}
+      keycloak: {condition: service_healthy}
   users-worker:
     build: {context: ., dockerfile: deploy/Dockerfile, args: {SERVICE: Users, HOST: Worker}}
+    environment:
+      <<: *broker
+      ConnectionStrings__Database: Host=postgres;Database=users_db;Username=users_app;Password=local-users;Timeout=3
+    depends_on:
+      init-users: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
   wallet-worker:
     build: {context: ., dockerfile: deploy/Dockerfile, args: {SERVICE: Wallet, HOST: Worker}}
+    environment:
+      <<: *broker
+      ConnectionStrings__Database: Host=postgres;Database=wallet_db;Username=wallet_app;Password=local-wallet;Timeout=3
+    depends_on:
+      init-wallet: {condition: service_completed_successfully}
+      rabbitmq: {condition: service_healthy}
 volumes:
   postgres-data:
   rabbit-data:
