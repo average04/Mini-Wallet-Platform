@@ -167,6 +167,53 @@ public sealed class ProfileApiTests(UsersDatabase database) : IClassFixture<User
         Assert.False(await db.Identities.AnyAsync(i => i.Subject == subject));
     }
 
+    [Theory]
+    [InlineData("create")]
+    [InlineData("repeat-create")]
+    [InlineData("update-own")]
+    [InlineData("update-admin")]
+    public async Task Null_character_in_display_name_returns_400_without_side_effects(string operation)
+    {
+        var subject = Guid.NewGuid().ToString();
+        using var app = new UsersApiFactory(database.ConnectionString);
+        using var client = app.CreateClient();
+        var id = Guid.Empty;
+        if (operation != "create")
+        {
+            using var created = await Create(client, subject, "Original");
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("playerId").GetGuid();
+        }
+        await using var db = database.Open();
+        var profileCount = await db.Profiles.CountAsync();
+        var identityCount = await db.Identities.CountAsync();
+        var eventCount = await db.Outbox.CountAsync();
+        var before = await db.Profiles.AsNoTracking().SingleOrDefaultAsync(p => p.Id == id);
+
+        using var response = operation switch
+        {
+            "update-own" => await Send(client, HttpMethod.Put, "/api/v1/profiles/me", subject,
+                new { displayName = "Al\0ice" }),
+            "update-admin" => await Send(client, HttpMethod.Put, $"/api/v1/profiles/{id}", "admin-without-profile",
+                new { displayName = "Al\0ice" }, admin: true),
+            _ => await Create(client, subject, "Al\0ice")
+        };
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("invalid_display_name", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        Assert.Null(response.Headers.RetryAfter);
+        Assert.Equal(profileCount, await db.Profiles.CountAsync());
+        Assert.Equal(identityCount, await db.Identities.CountAsync());
+        Assert.Equal(eventCount, await db.Outbox.CountAsync());
+        if (before is not null)
+        {
+            var after = await db.Profiles.AsNoTracking().SingleAsync(p => p.Id == id);
+            Assert.Equal(before.DisplayName, after.DisplayName);
+            Assert.Equal(before.UpdatedAt, after.UpdatedAt);
+        }
+    }
+
     [Fact]
     public async Task Outbox_failure_rolls_back_profile_and_identity_before_retry()
     {

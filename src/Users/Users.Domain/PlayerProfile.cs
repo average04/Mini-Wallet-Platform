@@ -17,7 +17,7 @@ public sealed class PlayerProfile
         => (DisplayName, UpdatedAt) = (Normalize(displayName), now);
     private static string Normalize(string displayName)
     {
-        if (string.IsNullOrWhiteSpace(displayName) || displayName.Trim().Length > 100)
+        if (string.IsNullOrWhiteSpace(displayName) || displayName.Contains('\0') || displayName.Trim().Length > 100)
             throw new ProfileRuleException("invalid_display_name");
         return displayName.Trim();
     }

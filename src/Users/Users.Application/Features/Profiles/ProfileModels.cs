@@ -11,5 +11,6 @@ public sealed record CreateProfileResult(ProfileView Profile, bool Created);
 public sealed class ProfileRequestValidator : AbstractValidator<ProfileRequest>
 {
     public ProfileRequestValidator()
-        => RuleFor(x => x.DisplayName).NotEmpty().Must(name => name is not null && name.Trim().Length is >= 1 and <= 100);
+        => RuleFor(x => x.DisplayName).NotEmpty().Must(name => name is not null
+            && !name.Contains('\0') && name.Trim().Length is >= 1 and <= 100);
 }

@@ -35,7 +35,7 @@ In the Keycloak login screen choose **Register**, use a unique username and a te
 | Wallet | GET `/api/v1/players/{playerId}/transactions` | Admin |
 | Wallet | GET `/api/v1/transactions/{transactionId}` | Owner/admin; otherwise 404 |
 
-Profile updates accept only `displayName` (trimmed, 1–100 characters). Client-supplied identities, roles and unknown properties are rejected.
+Profile updates accept only `displayName` (trimmed, 1–100 characters). Names containing a null character (`\0`) are rejected with 400 `invalid_display_name` on creation and updates. Client-supplied identities, roles and unknown properties are rejected.
 
 Amounts are positive invariant **JSON strings**: USD/EUR allow at most two decimal places; BTC allows eight. Exponents, floats as JSON numbers, excess precision and overflow are rejected rather than rounded. Balances use decimal arithmetic and PostgreSQL `numeric(28,8)`. There is no currency conversion.
 
