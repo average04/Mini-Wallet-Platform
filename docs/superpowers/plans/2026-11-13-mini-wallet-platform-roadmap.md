@@ -1,6 +1,6 @@
 # Mini Wallet Platform Implementation Roadmap
 
-> **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:executing-plans or superpowers:subagent-driven-development when implementation is authorized. This is a milestone roadmap; refine the current milestone into concrete interfaces/tests before coding it. Checkboxes are future work.
+> **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:executing-plans or superpowers:subagent-driven-development when implementation is authorized. This is a milestone roadmap; refine the current milestone into concrete interfaces/tests before coding it. Checkboxes record completed implementation and verification.
 
 **Goal:** Deliver an interview-ready Users/Wallet backend with correct money handling, replaceable identity, durable provisioning, and a runnable demo.
 
@@ -10,7 +10,7 @@
 
 **Spec:** [Design baseline](../specs/2026-11-13-mini-wallet-platform-design.md). Claude approved the revised design/roadmap at commit 4200919 in Collidr round 2; its non-blocking implementation notes are folded into the milestones below. Runtime/infrastructure choices remain documented implementation proposals.
 
-**Status:** Revised 2026-11-13; no implementation milestones complete. Stable .NET SDK 10.0.103 and preview 10.0.300-preview.0.26177.108 were both found locally, plus Docker Compose. At execution, choose a supported serviced stable .NET 10 version, pin it in global.json and container images, and disallow prerelease SDK selection. No container startup is claimed yet.
+**Status:** Implemented 2026-11-13 on codex/implement-mini-wallet. Stable SDK 10.0.404 and runtime 10.0.15 pinned. Automated suite: 91 passed. Fresh isolated Compose startup and real PKCE/signup/zero-to-105/replay browser acceptance passed. Fresh independent review completed; its important poison-message finding was fixed with failing-then-passing regressions and a green full suite. Handoff verification complete.
 
 ## Global constraints
 
@@ -72,11 +72,11 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** MiniWalletPlatform.sln, global.json, Directory.Build.props, Directory.Packages.props, .editorconfig, .gitignore, compose.yaml, deploy/Dockerfiles, src/Contracts, the ten service projects, and tests/{Users.Tests,Wallet.Tests}/Architecture.
 
-- [ ] Create the 13-project layout in the design and pin stable compatible versions.
-- [ ] Define Application ports for current actor, focused repositories, and transaction control; freeze the small /api/v1 contract and money/error conventions.
-- [ ] Add dependency checks in the existing service test projects. Domain/Application cannot reference Infrastructure/API/Worker or other-service internals.
-- [ ] Bring up minimal container wiring and database initialization; add each actual migration alongside its feature. Start README prerequisites/commands now, including that Docker must be running for Testcontainers-based dotnet test.
-- [ ] Run dotnet build MiniWalletPlatform.sln, the architecture tests, and docker compose config; commit.
+- [x] Create the 13-project layout in the design and pin stable compatible versions.
+- [x] Define Application ports for current actor, focused repositories, and transaction control; freeze the small /api/v1 contract and money/error conventions.
+- [x] Add dependency checks in the existing service test projects. Domain/Application cannot reference Infrastructure/API/Worker or other-service internals.
+- [x] Bring up minimal container wiring and database initialization; add each actual migration alongside its feature. Start README prerequisites/commands now, including that Docker must be running for Testcontainers-based dotnet test.
+- [x] Run dotnet build MiniWalletPlatform.sln, the architecture tests, and docker compose config; commit.
 
 **Exit:** Consistent enforced boundaries and a usable local foundation; no business rules in host projects.
 
@@ -84,14 +84,14 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** Wallet.Domain/{Money,Wallets,Transactions}; Wallet.Application/Features/Transactions/{Execute,Bet,Win,Bonus}; Wallet.Infrastructure/Persistence and Migrations; Wallet.Api/Endpoints/TransactionsEndpoints.cs; tests/Wallet.Tests/{Unit,Integration}.
 
-- [ ] Create isolated Testcontainers PostgreSQL fixtures with wallets/identity associations. Use a configured test JWT authority with real bearer validation; these fixtures never seed the runtime application.
-- [ ] Write domain cases for positive amounts, USD/EUR 2-digit and BTC 8-digit precision, insufficient funds, storage/arithmetic limits, and successful-BET-only WIN eligibility.
-- [ ] Implement one execution endpoint/pipeline and separate BET/WIN/BONUS handlers. BET owner comes from identity; WIN target/currency comes from the BET; BONUS requires admin permission and an existing target wallet.
-- [ ] Commit wallet changes, successful history and idempotency results atomically under a row lock. Rejections have no history/money effect. Document per-target-player key scope and authorize before replay.
-- [ ] Use two WebApplicationFactory hosts over the same real database: two USD 80 BETs on USD 100 produce one success and USD 20 remaining.
-- [ ] Cover concurrent duplicate keys, changed payload within one scope, allowed key reuse for a different player, a lost response after commit, and a cached insufficient-funds result after later funding.
-- [ ] Cover different-key duplicate WIN, player WIN/BONUS denial, cross-player BET denial, unauthorized replay, and BONUS retry without duplicate credit.
-- [ ] Run dotnet test tests/Wallet.Tests; record results and commit.
+- [x] Create isolated Testcontainers PostgreSQL fixtures with wallets/identity associations. Use a configured test JWT authority with real bearer validation; these fixtures never seed the runtime application.
+- [x] Write domain cases for positive amounts, USD/EUR 2-digit and BTC 8-digit precision, insufficient funds, storage/arithmetic limits, and successful-BET-only WIN eligibility.
+- [x] Implement one execution endpoint/pipeline and separate BET/WIN/BONUS handlers. BET owner comes from identity; WIN target/currency comes from the BET; BONUS requires admin permission and an existing target wallet.
+- [x] Commit wallet changes, successful history and idempotency results atomically under a row lock. Rejections have no history/money effect. Document per-target-player key scope and authorize before replay.
+- [x] Use two WebApplicationFactory hosts over the same real database: two USD 80 BETs on USD 100 produce one success and USD 20 remaining.
+- [x] Cover concurrent duplicate keys, changed payload within one scope, allowed key reuse for a different player, a lost response after commit, and a cached insufficient-funds result after later funding.
+- [x] Cover different-key duplicate WIN, player WIN/BONUS denial, cross-player BET denial, unauthorized replay, and BONUS retry without duplicate credit.
+- [x] Run dotnet test tests/Wallet.Tests; record results and commit.
 
 **Exit:** The highest-risk financial rules are proven before broker/IdP setup can consume the budget.
 
@@ -99,13 +99,13 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** deploy/keycloak/realm.json, compose.yaml, each API's auth/OpenAPI setup, provider adapters, and the service test projects' authentication tests.
 
-- [ ] Import local player/admin accounts, default player role for signup, explicit mini-wallet-api audience mapping, and trusted admin permission mapping.
-- [ ] Configure public PKCE S256 clients, exact Swagger redirect URIs/Web Origins, API web-app CORS, disabled password grants, verified email, and Mailpit.
-- [ ] Add prompt=login to both Swagger OAuth configurations. Document clearing the current Swagger authorization before changing accounts; separate player/admin browser windows are an alternative. Verify an actual player-to-admin switch.
-- [ ] Implement the public issuer/internal metadata topology from the design, including reachable discovered JWKS. Do not weaken issuer/signature/audience/lifetime checks.
-- [ ] Test wrong issuer/audience, expired/unsigned/missing tokens, missing admin permission, and authenticated actors without a profile. Assert API authorization against milestone 2's real handlers.
-- [ ] Sign in through both Swagger UIs and prove the same browser token reaches both APIs. Check real signup/email verification; add these steps to README.
-- [ ] Run auth tests, document the working URLs/realm settings, and commit.
+- [x] Import local player/admin accounts, default player role for signup, explicit mini-wallet-api audience mapping, and trusted admin permission mapping.
+- [x] Configure public PKCE S256 clients, exact Swagger redirect URIs/Web Origins, API web-app CORS, disabled password grants, verified email, and Mailpit.
+- [x] Add prompt=login to both Swagger OAuth configurations. Document clearing the current Swagger authorization before changing accounts; separate player/admin browser windows are an alternative. Verify an actual player-to-admin switch.
+- [x] Implement the public issuer/internal metadata topology from the design, including reachable discovered JWKS. Do not weaken issuer/signature/audience/lifetime checks.
+- [x] Test wrong issuer/audience, expired/unsigned/missing tokens, missing admin permission, and authenticated actors without a profile. Assert API authorization against milestone 2's real handlers.
+- [x] Sign in through both Swagger UIs and prove the same browser token reaches both APIs. Check real signup/email verification; add these steps to README.
+- [x] Run auth tests, document the working URLs/realm settings, and commit.
 
 **Exit:** The actual IdP and browser auth flow work; business layers remain provider-independent.
 
@@ -113,11 +113,11 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** Users.Domain/Profiles; Users.Application/Features/Profiles/{Create,Get,Update}; Users.Infrastructure identity/profile/outbox repositories and migrations; Users.Api/Endpoints/ProfilesEndpoints.cs; Contracts/PlayerCreatedV1.cs; tests/Users.Tests.
 
-- [ ] Test create/read/update ownership and admin access, verification requirements, display-name validation, and forbidden role/identity mutations.
-- [ ] Generate platform PlayerIds and unique (issuer, subject) associations; keep the association model capable of multiple verified identities per player.
-- [ ] In one transaction, create profile, association, and PlayerCreatedV1 outbox record. Concurrent/retried POSTs return the existing profile with 200/Location; they do not update it or publish another event. No profile idempotency-key store.
-- [ ] Prove rollback on failure and recovery from a lost response. Add one focused identity-resolution test with a second association; document migration rather than building a linking workflow.
-- [ ] Run dotnet test tests/Users.Tests; update docs and commit.
+- [x] Test create/read/update ownership and admin access, verification requirements, display-name validation, and forbidden role/identity mutations.
+- [x] Generate platform PlayerIds and unique (issuer, subject) associations; keep the association model capable of multiple verified identities per player.
+- [x] In one transaction, create profile, association, and PlayerCreatedV1 outbox record. Concurrent/retried POSTs return the existing profile with 200/Location; they do not update it or publish another event. No profile idempotency-key store.
+- [x] Prove rollback on failure and recovery from a lost response. Add one focused identity-resolution test with a second association; document migration rather than building a linking workflow.
+- [x] Run dotnet test tests/Users.Tests; update docs and commit.
 
 **Exit:** Profiles work while Wallet is unavailable; one durable event follows one created player.
 
@@ -125,13 +125,13 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** Users.Worker, Users.Infrastructure/Outbox, Wallet.Worker, Wallet.Application/Features/Provisioning, Wallet.Infrastructure inbox/projection repositories and migrations, service Integration/Provisioning tests.
 
-- [ ] Both workers idempotently declare the exchange, durable queue/binding and dead-letter topology before use, including reconnects; publisher startup must not depend on Wallet.Worker being running.
-- [ ] Publish one outbox row using SKIP LOCKED, persistent/durable routing, mandatory publication and a three-second confirm bound. Mark it published only after confirmation with no basic.return; a returned-then-confirmed message fails, rolls back the claim and retries with backoff outside the transaction.
-- [ ] Consume with prefetch 1/manual acknowledgement. Atomically commit inbox marker, identity projection and three zero USD/EUR/BTC wallets, then acknowledge.
-- [ ] Retain unacknowledged transient failures and retry with capped delay; avoid immediate nack/requeue loops. Retain malformed/conflicting messages in a dead-letter queue with a short diagnostic note.
-- [ ] Prove duplicate/restarted delivery does not reset an existing funded wallet. Prove all three wallets appear automatically after a new profile.
-- [ ] Use one representative outage scenario: start with no broker queues declared and Wallet.Worker stopped, create profiles, restore dependencies, and observe automatic recovery with one provisioning effect. In the same fixture force an unroutable publish, assert its outbox row stays pending, restore routing and prove retry succeeds. Reuse this evidence in milestone 7.
-- [ ] Run the provisioning tests, update README pending/retry behaviour, and commit.
+- [x] Both workers idempotently declare the exchange, durable queue/binding and dead-letter topology before use, including reconnects; publisher startup must not depend on Wallet.Worker being running.
+- [x] Publish one outbox row using SKIP LOCKED, persistent/durable routing, mandatory publication and a three-second confirm bound. Mark it published only after confirmation with no basic.return; a returned-then-confirmed message fails, rolls back the claim and retries with backoff outside the transaction.
+- [x] Consume with prefetch 1/manual acknowledgement. Atomically commit inbox marker, identity projection and three zero USD/EUR/BTC wallets, then acknowledge.
+- [x] Retain unacknowledged transient failures and retry with capped delay; avoid immediate nack/requeue loops. Retain malformed/conflicting messages in a dead-letter queue with a short diagnostic note.
+- [x] Prove duplicate/restarted delivery does not reset an existing funded wallet. Prove all three wallets appear automatically after a new profile.
+- [x] Use one representative outage scenario: start with no broker queues declared and Wallet.Worker stopped, create profiles, restore dependencies, and observe automatic recovery with one provisioning effect. In the same fixture force an unroutable publish, assert its outbox row stays pending, restore routing and prove retry succeeds. Reuse this evidence in milestone 7.
+- [x] Run the provisioning tests, update README pending/retry behaviour, and commit.
 
 **Exit:** Durable, independently hosted background processing provisions wallets without a separate wallet-creation call.
 
@@ -139,12 +139,12 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** Wallet.Application/Features/{Balances,History,GetTransaction}; Infrastructure queries; API endpoints/Problem Details/OpenAPI; tests/Wallet.Tests/Integration/ReadApiTests.cs.
 
-- [ ] Add owner/admin balances and history plus GET /api/v1/transactions/{transactionId}; POST successes return its Location. Unauthorized transaction lookup returns 404.
-- [ ] Add the two-column cursor, default 20/max 100, exact money strings, pending-provisioning 409 with Retry-After: 2, and consistent errors.
-- [ ] Test ownership/admin access, unknown resources, malformed/cross-player cursors, tied timestamps and appended history.
-- [ ] Document auth, all three transaction types, per-player idempotency scope, rejected attempts, pagination and the zero-to-funded demo.
-- [ ] Declare Idempotency-Key as a required transaction POST header in OpenAPI so Swagger Try it out shows the input; document where the profile response exposes PlayerId.
-- [ ] Run read API tests and commit.
+- [x] Add owner/admin balances and history plus GET /api/v1/transactions/{transactionId}; POST successes return its Location. Unauthorized transaction lookup returns 404.
+- [x] Add the two-column cursor, default 20/max 100, exact money strings, pending-provisioning 409 with Retry-After: 2, and consistent errors.
+- [x] Test ownership/admin access, unknown resources, malformed/cross-player cursors, tied timestamps and appended history.
+- [x] Document auth, all three transaction types, per-player idempotency scope, rejected attempts, pagination and the zero-to-funded demo.
+- [x] Declare Idempotency-Key as a required transaction POST header in OpenAPI so Swagger Try it out shows the input; document where the profile response exposes PlayerId.
+- [x] Run read API tests and commit.
 
 **Exit:** Reviewer can inspect successful transactions and explore every required API flow.
 
@@ -152,10 +152,10 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** Existing service integration tests/fixtures and README verification section.
 
-- [ ] Rerun milestone 2's two-host concurrency/replay tests and milestones 4–5's profile/provisioning duplicate/outage cases.
-- [ ] Cover any missing basic DB-unavailable path: no false success and safe same-key retry after recovery.
-- [ ] Inspect separate API/Worker entrypoints and migration ordering; replicas must not share an in-process lock or race migrations.
-- [ ] Run dotnet test MiniWalletPlatform.sln; record real results and fix failures in required guarantees. Commit.
+- [x] Rerun milestone 2's two-host concurrency/replay tests and milestones 4–5's profile/provisioning duplicate/outage cases.
+- [x] Cover any missing basic DB-unavailable path: no false success and safe same-key retry after recovery.
+- [x] Inspect separate API/Worker entrypoints and migration ordering; replicas must not share an in-process lock or race migrations.
+- [x] Run dotnet test MiniWalletPlatform.sln; record real results and fix failures in required guarantees. Commit.
 
 **Exit:** Minimum evidence exists for the claimed distributed guarantees. Exhaustive permutations remain deferred.
 
@@ -163,20 +163,45 @@ Do not remove Clean Architecture, PKCE, BONUS demo funding, core access rules, p
 
 **Files:** README.md, final deployment configuration, and design/roadmap updates.
 
-- [ ] From an isolated fresh Compose project/volumes, verify docker compose up --build. Preserve the user's existing volumes.
-- [ ] Follow the design's real demo: player signs in/creates profile → three zero wallets → admin BONUS USD 100 → player BET USD 10 → admin WIN USD 15 → USD 105 and three successful history entries. Explicitly switch Swagger accounts, copy PlayerId from the profile response and use the visible Idempotency-Key field. Replays preserve that result.
-- [ ] Exercise fresh signup/verification and confirm that new players get zero wallets. No startup profile/money fixture or password grant is involved.
-- [ ] Finish README local credentials/URLs, commands/tests, architecture, assumptions, IdP migration procedure, pending/outage behaviour, optional cuts, and actual incomplete requirements.
-- [ ] Prepare the interview walkthrough: transaction atomicity, outbox/inbox recovery, adding a transaction handler, and replacing identity-provider configuration/mapping.
-- [ ] Inspect for secrets/temp artifacts, run final appropriate checks after changes, and commit. Publishing/submitting remains a separate user action.
+- [x] From an isolated fresh Compose project/volumes, verify docker compose up --build. Preserve the user's existing volumes.
+- [x] Follow the design's real demo: player signs in/creates profile → three zero wallets → admin BONUS USD 100 → player BET USD 10 → admin WIN USD 15 → USD 105 and three successful history entries. Explicitly switch Swagger accounts, copy PlayerId from the profile response and use the visible Idempotency-Key field. Replays preserve that result.
+- [x] Exercise fresh signup/verification and confirm that new players get zero wallets. No startup profile/money fixture or password grant is involved.
+- [x] Finish README local credentials/URLs, commands/tests, architecture, assumptions, IdP migration procedure, pending/outage behaviour, optional cuts, and actual incomplete requirements.
+- [x] Prepare the interview walkthrough: transaction atomicity, outbox/inbox recovery, adding a transaction handler, and replacing identity-provider configuration/mapping.
+- [x] Inspect for secrets/temp artifacts, run final appropriate checks after changes, and commit. Publishing/submitting remains a separate user action.
 
 **Exit:** A reviewer can reproduce the demo and the candidate can explain the trade-offs within the timebox.
 
 ## Definition of done
 
-- [ ] Required profiles, wallet currencies, BET/WIN, balances/history and all access rules work.
-- [ ] Full Clean Architecture is consistent and enforced across both services.
-- [ ] Automatic zero wallets, correct multi-instance balances, durable accepted work, safe retries, and separate workers have meaningful evidence.
-- [ ] Real PKCE works in both API docs with one token; credentials stay with the IdP.
-- [ ] One-command startup, working admin-funded demo, source/history, tests and accurate README are delivered.
-- [ ] Actual elapsed work, assumptions, cuts, test results, and any unmet requirements are disclosed.
+- [x] Required profiles, wallet currencies, BET/WIN, balances/history and all access rules work.
+- [x] Full Clean Architecture is consistent and enforced across both services.
+- [x] Automatic zero wallets, correct multi-instance balances, durable accepted work, safe retries, and separate workers have meaningful evidence.
+- [x] Real PKCE works in both API docs with one token; credentials stay with the IdP.
+- [x] One-command startup, working admin-funded demo, source/history, tests and accurate README are delivered.
+- [x] Actual elapsed work, assumptions, cuts, test results, and any unmet requirements are disclosed.
+
+## Execution record
+
+The required backend scope is implemented and verified. Final suite: **91 passed, zero failed/skipped**. The real browser demo ran in an isolated fresh Compose project: new registration, Mailpit verification, PKCE, automatic zero wallets, admin BONUS 100, player BET 10, admin WIN 15, balance 105, three history entries, and safe replay of all three requests. The normal local stack was restored without deleting either project's volumes.
+
+A fresh independent whole-branch review found one important issue and no critical/minor issues: a valid envelope with an embedded NUL in an identity could retry forever and block provisioning. Two application cases and a real-broker regression failed first; rejecting invalid identity text before the transaction made all pass. The broker regression also verifies that a following healthy player is provisioned. Transient storage failures retain their existing retry behavior.
+
+Implementation decisions, in the order recorded:
+
+| Decision | Reason and trade-off |
+| --- | --- |
+| Reuse the requested D:/Projects checkout on a feature branch. | Honors the chosen location and desktop checkout preference; main remains unchanged, but no additional worktree isolates concurrent local edits. |
+| Maintain milestone briefs and verification records directly. | The plan helper accepted Task headings but the approved plan used Milestone headings; equivalent test gates were preserved, with manual bookkeeping instead of helper automation. |
+| Install verified SDK 10.0.404 under ignored .tools and pin runtime/packages. | The installed stable SDK was older; local tooling uses additional disk space and its path is documented. Compose builds independently. |
+| Explicitly pin the runtime EF Relational dependency. | A private design-time dependency otherwise allowed a mismatched transitive runtime version; the selected package set is verified together and needs coordinated upgrades. |
+| Commit provisioning and read milestones together. | Read dependency wiring landed while the worker build was running; the resulting commit is coherent and runnable but larger to review. |
+| Keep production TLS, secret rotation and replicated disaster recovery deferred. | Explicitly approved local-backend scope; the local setup must be hardened before production use. |
+| Keep live identity-linking and automated provider migration deferred. | Stable IDs, multiple associations and a controlled migration procedure are implemented/documented; a real cutover still requires operator work. |
+| Keep automated poison repair/replay deferred. | Correct poison detection and retained dead-letter storage are covered; investigation and replay remain manual. |
+| Keep exhaustive crash/load permutations deferred. | Real dependency failures and representative two-host/concurrency cases are covered; untested production loads still need validation. |
+| Keep the feature branch committed locally. | Implementation was authorized; publishing, submitting or merging was not requested. Integration remains a separate action. |
+
+No deferred minor review findings. Optional frontend/SignalR features remain outside the agreed core. See README for commands, credentials, precise behavior and elapsed session time.
+
+Local verification artifacts remain in the ignored .superpowers/sdd task folder because automatic approval review rejected its cleanup as "blocked by policy". They are not part of the committed deliverable.

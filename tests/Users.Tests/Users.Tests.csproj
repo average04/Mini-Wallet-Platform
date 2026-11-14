@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><IsPackable>false</IsPackable><IsTestProject>true</IsTestProject></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Users/Users.Domain/Users.Domain.csproj" />
+    <ProjectReference Include="../../src/Users/Users.Application/Users.Application.csproj" />
+    <ProjectReference Include="../../src/Users/Users.Infrastructure/Users.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Users/Users.Api/Users.Api.csproj" />
+    <ProjectReference Include="../../src/Users/Users.Worker/Users.Worker.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.RabbitMq" />
+  </ItemGroup>
+  <ItemGroup><Using Include="Xunit" /></ItemGroup>
+</Project>

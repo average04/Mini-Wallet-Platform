@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+.tools/
+.superpowers/
+TestResults/
+*.user
+.env
+.env.*
+!.env.example

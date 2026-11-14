@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><IsPackable>false</IsPackable><IsTestProject>true</IsTestProject></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Wallet/Wallet.Domain/Wallet.Domain.csproj" />
+    <ProjectReference Include="../../src/Wallet/Wallet.Application/Wallet.Application.csproj" />
+    <ProjectReference Include="../../src/Wallet/Wallet.Infrastructure/Wallet.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Wallet/Wallet.Api/Wallet.Api.csproj" />
+    <ProjectReference Include="../../src/Wallet/Wallet.Worker/Wallet.Worker.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.RabbitMq" />
+  </ItemGroup>
+  <ItemGroup><Using Include="Xunit" /></ItemGroup>
+</Project>

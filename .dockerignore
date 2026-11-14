@@ -1,0 +1,6 @@
+.git
+.tools
+.superpowers
+**/bin
+**/obj
+TestResults

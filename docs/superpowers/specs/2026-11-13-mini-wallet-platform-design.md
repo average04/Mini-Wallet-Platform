@@ -1,7 +1,7 @@
 # Mini Wallet Platform — Design Baseline
 
 Date: 2026-11-13
-Status: approved by Claude in Collidr round 2 at commit 4200919; non-blocking implementation notes incorporated below. No application implementation.
+Status: approved by Claude in Collidr round 2 at commit 4200919; implemented on codex/implement-mini-wallet. Core automated checks and fresh-stack browser acceptance passed; see README for evidence and scope.
 Source: the supplied candidate-brief-v2.md and architecture discussion. The assessment is reference material, not authorization to submit the work or contact anyone.
 
 ## Purpose and limits
