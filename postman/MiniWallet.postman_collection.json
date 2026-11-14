@@ -3,16 +3,254 @@
     "_postman_id": "b7857f7b-2f75-4542-9d8c-47a06b5bc2b9",
     "name": "MiniWallet - Manual Feature Tests",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Manual feature tests for the local Mini Wallet Platform.\n\nSTART HERE\n1. Select the MiniWallet Local environment.\n2. In Users Swagger (http://localhost:5101/swagger), authorize with OAuth2 as your player. Execute GET /api/v1/profiles/me (404 is fine for a new player). Copy the access token from the generated curl Authorization header, WITHOUT the Bearer prefix or surrounding quotes, into player_token.\n3. Authorize in Wallet Swagger (http://localhost:5102/swagger) as business admin and copy its access token into admin_token the same way. Keep tokens in local environment values. Tokens expire after five minutes; sign in again and replace them when requests return 401.\n4. Send requests manually in folders 00 through 07. Open Test Results after each response. Folder 08 contains optional checks with special fresh-account prerequisites.\n\nThe current Keycloak clients register only Swagger callback URLs. This collection reuses access tokens obtained through those real authorization-code + PKCE logins; it does not enable password grant or pretend a Postman OAuth callback is registered. No credentials or tokens are shipped in these files.\n\nProfiles and money are real changes to your LOCAL demo data. Returned player_id / bonus_id / bet_id / win_id / cursors are saved automatically. Every request selects its required player/admin token. The 100 BONUS, 10 BET and 15 WIN increase an existing USD balance by 105; a fresh player finishes at 105.\n\nIdempotency keys use a generated run_id and stay stable for retries. To intentionally run another money demo for the same player, clear run_id, bonus_id, bet_id, win_id and expected_usd, then restart folder 03 from BONUS. This adds another 105 USD. Do not clear these when merely retrying. Switching player and reading/creating the profile resets the saved demo IDs automatically.\n\nRepository guide: postman/README.md. Requests are examples for manual testing; do not run the entire collection blindly because optional checks depend on specific state.\n"
+    "description": "Manual feature tests for the local Mini Wallet Platform.\n\nSTART HERE\n1. Select the MiniWallet Local environment.\n2. Open 00 - Login and service health -> Login as player. Authorization -> Get New Access Token -> sign in at Keycloak -> Use Token -> Send. The response verifies your identity and automatically saves player_token.\n3. Repeat Login as admin with admin / Admin123!. It saves admin_token separately. Use your registered player or player / Player123! for the player flow.\n4. Send the remaining requests manually in folders 01 through 07. Request descriptions explain their expected responses. Folder 08 contains optional fresh-account checks.\n\nPostman's OAuth helper performs the authorization-code + PKCE S256 token exchange against Keycloak. The dedicated mini-wallet-postman client registers Postman's callback URLs; password grant remains disabled. The login requests call userinfo to validate the selected account and save the token for the existing bearer-auth requests. Tokens expire after five minutes: refresh or get a new token in the matching Login request, Use Token, and Send again.\n\nNew Docker installations import the Postman client automatically. For an existing Keycloak database, run ./postman/Configure-Keycloak.ps1 once from PowerShell; it adds/updates only the dedicated Postman client without resetting data.\n\nProfiles and money are real changes to LOCAL demo data. Returned player_id / bonus_id / bet_id / win_id / cursors are saved automatically. BONUS 100, BET 10 and WIN 15 increase an existing USD balance by 105; a fresh player finishes at 105.\n\nIdempotency keys use a generated run_id and remain stable for retries. For an intentionally new money demo with the same player, clear run_id, bonus_id, bet_id, win_id and expected_usd, then restart folder 03 from BONUS. Do not clear these when merely retrying. Switching player and reading/creating the profile resets the demo IDs automatically.\n\nRepository guide: postman/README.md. Do not run the entire collection blindly: optional checks depend on specific account state. No tokens are shipped in these files.\n"
   },
   "auth": {
     "type": "noauth"
   },
   "item": [
     {
-      "name": "00 - Service health",
-      "description": "Start here. No token is required. Health endpoints confirm the API processes are live, not that every dependency is ready.",
+      "name": "00 - Login and service health",
+      "description": "Select MiniWallet Local, then use each Login request: Authorization -> Get New Access Token -> Keycloak sign-in -> Use Token -> Send. The token is saved automatically. The two health requests need no token.",
       "item": [
+        {
+          "name": "Login as player (saves player_token)",
+          "request": {
+            "method": "GET",
+            "url": "{{oidc_issuer}}/protocol/openid-connect/userinfo",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "oauth2",
+              "oauth2": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code_with_pkce",
+                  "type": "string"
+                },
+                {
+                  "key": "tokenName",
+                  "value": "MiniWallet player",
+                  "type": "string"
+                },
+                {
+                  "key": "authUrl",
+                  "value": "{{oidc_issuer}}/protocol/openid-connect/auth?prompt=login",
+                  "type": "string"
+                },
+                {
+                  "key": "accessTokenUrl",
+                  "value": "{{oidc_issuer}}/protocol/openid-connect/token",
+                  "type": "string"
+                },
+                {
+                  "key": "clientId",
+                  "value": "{{oidc_client_id}}",
+                  "type": "string"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{oidc_callback_url}}",
+                  "type": "string"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid profile email",
+                  "type": "string"
+                },
+                {
+                  "key": "challengeAlgorithm",
+                  "value": "S256",
+                  "type": "string"
+                },
+                {
+                  "key": "client_authentication",
+                  "value": "body",
+                  "type": "string"
+                },
+                {
+                  "key": "addTokenTo",
+                  "value": "header",
+                  "type": "string"
+                },
+                {
+                  "key": "headerPrefix",
+                  "value": "Bearer",
+                  "type": "string"
+                },
+                {
+                  "key": "useBrowser",
+                  "value": true,
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Get your player token entirely from Postman:\n1. Open this request's Authorization tab. OAuth 2.0 / Authorization Code (With PKCE) is configured.\n2. Click Get New Access Token. Sign in at Keycloak as your registered player (or player / Player123!).\n3. Accept the return to Postman and click Use Token.\n4. Click Send on this request. A 200 userinfo response verifies the account and saves player_token automatically in MiniWallet Local. Other API requests already use that variable.\n\nIf the token expires, reopen this request, refresh the token in Authorization (or Get New Access Token), Use Token, and Send again to update the environment. Do not put an admin token in the player slot: this request rejects that mistake so permission tests remain meaningful.\n\nThe token exchange is performed by Postman's OAuth helper: POST /protocol/openid-connect/token with grant_type=authorization_code, code, code_verifier, client_id and redirect_uri. Passwords are entered only on Keycloak's login page. This GET verifies and captures the issued token; it is not a business API login endpoint."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const role = \"player\";",
+                  "pm.test(\"Keycloak accepted the access token (HTTP 200)\", () => {",
+                  "  if (pm.response.code !== 200) throw new Error(\"Open Authorization, Get New Access Token, sign in, Use Token, then Send again.\");",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const token = pm.variables.replaceIn(pm.request.auth.oauth2.get(\"accessToken\") || \"\");",
+                  "  if (!token) throw new Error(\"No OAuth access token selected. Click Use Token before Send.\");",
+                  "  const part = token.split(\".\")[1];",
+                  "  if (!part) throw new Error(\"Expected a JWT access token.\");",
+                  "  const base64 = part.replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "  const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, \"=\")));",
+                  "  const identity = pm.response.json();",
+                  "  const roles = claims.realm_access?.roles || [];",
+                  "  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];",
+                  "  // Userinfo validates the token at Keycloak. These checks catch an accidental wrong account or token selection.",
+                  "  const valid = claims.sub === identity.sub",
+                  "    && claims.iss === pm.variables.get(\"oidc_issuer\")",
+                  "    && audiences.includes(pm.variables.get(\"api_audience\"))",
+                  "    && claims.exp > Math.floor(Date.now() / 1000)",
+                  "    && (role === \"admin\" ? roles.includes(\"admin\") : roles.includes(\"player\") && !roles.includes(\"admin\"));",
+                  "  pm.test(\"Correct account, audience and unexpired token\", () => {",
+                  "    if (!valid) throw new Error(\"Choose the \" + role + \" account and its access token. The environment token was not replaced.\");",
+                  "  });",
+                  "  if (valid) {",
+                  "    pm.environment.set(role + \"_token\", token);",
+                  "    pm.environment.set(role + \"_username\", identity.preferred_username || \"\");",
+                  "    pm.environment.set(role + \"_token_expires_at\", new Date(claims.exp * 1000).toISOString());",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login as admin (saves admin_token)",
+          "request": {
+            "method": "GET",
+            "url": "{{oidc_issuer}}/protocol/openid-connect/userinfo",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "oauth2",
+              "oauth2": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code_with_pkce",
+                  "type": "string"
+                },
+                {
+                  "key": "tokenName",
+                  "value": "MiniWallet admin",
+                  "type": "string"
+                },
+                {
+                  "key": "authUrl",
+                  "value": "{{oidc_issuer}}/protocol/openid-connect/auth?prompt=login",
+                  "type": "string"
+                },
+                {
+                  "key": "accessTokenUrl",
+                  "value": "{{oidc_issuer}}/protocol/openid-connect/token",
+                  "type": "string"
+                },
+                {
+                  "key": "clientId",
+                  "value": "{{oidc_client_id}}",
+                  "type": "string"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{oidc_callback_url}}",
+                  "type": "string"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid profile email",
+                  "type": "string"
+                },
+                {
+                  "key": "challengeAlgorithm",
+                  "value": "S256",
+                  "type": "string"
+                },
+                {
+                  "key": "client_authentication",
+                  "value": "body",
+                  "type": "string"
+                },
+                {
+                  "key": "addTokenTo",
+                  "value": "header",
+                  "type": "string"
+                },
+                {
+                  "key": "headerPrefix",
+                  "value": "Bearer",
+                  "type": "string"
+                },
+                {
+                  "key": "useBrowser",
+                  "value": true,
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Get your admin token entirely from Postman:\n1. Open this request's Authorization tab. OAuth 2.0 / Authorization Code (With PKCE) is configured.\n2. Click Get New Access Token. Sign in at Keycloak as the business admin (admin / Admin123!).\n3. Accept the return to Postman and click Use Token.\n4. Click Send on this request. A 200 userinfo response verifies the account and saves admin_token automatically in MiniWallet Local. Other API requests already use that variable.\n\nIf the token expires, reopen this request, refresh the token in Authorization (or Get New Access Token), Use Token, and Send again to update the environment. Do not put an admin token in the player slot: this request rejects that mistake so permission tests remain meaningful.\n\nThe token exchange is performed by Postman's OAuth helper: POST /protocol/openid-connect/token with grant_type=authorization_code, code, code_verifier, client_id and redirect_uri. Passwords are entered only on Keycloak's login page. This GET verifies and captures the issued token; it is not a business API login endpoint."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const role = \"admin\";",
+                  "pm.test(\"Keycloak accepted the access token (HTTP 200)\", () => {",
+                  "  if (pm.response.code !== 200) throw new Error(\"Open Authorization, Get New Access Token, sign in, Use Token, then Send again.\");",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const token = pm.variables.replaceIn(pm.request.auth.oauth2.get(\"accessToken\") || \"\");",
+                  "  if (!token) throw new Error(\"No OAuth access token selected. Click Use Token before Send.\");",
+                  "  const part = token.split(\".\")[1];",
+                  "  if (!part) throw new Error(\"Expected a JWT access token.\");",
+                  "  const base64 = part.replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "  const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, \"=\")));",
+                  "  const identity = pm.response.json();",
+                  "  const roles = claims.realm_access?.roles || [];",
+                  "  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];",
+                  "  // Userinfo validates the token at Keycloak. These checks catch an accidental wrong account or token selection.",
+                  "  const valid = claims.sub === identity.sub",
+                  "    && claims.iss === pm.variables.get(\"oidc_issuer\")",
+                  "    && audiences.includes(pm.variables.get(\"api_audience\"))",
+                  "    && claims.exp > Math.floor(Date.now() / 1000)",
+                  "    && (role === \"admin\" ? roles.includes(\"admin\") : roles.includes(\"player\") && !roles.includes(\"admin\"));",
+                  "  pm.test(\"Correct account, audience and unexpired token\", () => {",
+                  "    if (!valid) throw new Error(\"Choose the \" + role + \" account and its access token. The environment token was not replaced.\");",
+                  "  });",
+                  "  if (valid) {",
+                  "    pm.environment.set(role + \"_token\", token);",
+                  "    pm.environment.set(role + \"_username\", identity.preferred_username || \"\");",
+                  "    pm.environment.set(role + \"_token_expires_at\", new Date(claims.exp * 1000).toISOString());",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
         {
           "name": "Users API is live",
           "request": {
@@ -120,7 +358,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -189,7 +427,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -239,7 +477,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -308,7 +546,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -366,7 +604,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -429,7 +667,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -485,7 +723,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -557,7 +795,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
@@ -632,7 +870,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"bonus_id\")) throw new Error(\"Missing bonus_id. Send the prerequisite request described in this request first.\");",
@@ -708,7 +946,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
@@ -769,7 +1007,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"win_id\")) throw new Error(\"Missing win_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -829,7 +1067,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -877,7 +1115,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -926,7 +1164,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -982,7 +1220,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -1053,7 +1291,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"bonus_id\")) throw new Error(\"Missing bonus_id. Send the prerequisite request described in this request first.\");",
@@ -1130,7 +1368,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
@@ -1207,7 +1445,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
@@ -1286,7 +1524,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"run_id\")) throw new Error(\"Missing run_id. Send the prerequisite request described in this request first.\");",
@@ -1354,7 +1592,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"admin_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"win_id\")) throw new Error(\"Missing win_id. Send the prerequisite request described in this request first.\");",
@@ -1405,7 +1643,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"win_id\")) throw new Error(\"Missing win_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"expected_usd\")) throw new Error(\"Missing expected_usd. Send the prerequisite request described in this request first.\");"
@@ -1485,7 +1723,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -1546,7 +1784,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -1612,7 +1850,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
                 ]
@@ -1678,7 +1916,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
                 ]
@@ -1744,7 +1982,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
                 ]
@@ -1810,7 +2048,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
                 ]
@@ -1872,7 +2110,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -1920,7 +2158,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -1968,7 +2206,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -2080,7 +2318,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -2142,7 +2380,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -2208,7 +2446,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
@@ -2275,7 +2513,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
@@ -2325,7 +2563,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
                 ]
@@ -2380,7 +2618,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -2434,7 +2672,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"next_cursor\")) throw new Error(\"Missing next_cursor. Send the prerequisite request described in this request first.\");",
                   "if (!pm.environment.get(\"first_page_ids\")) throw new Error(\"Missing first_page_ids. Send the prerequisite request described in this request first.\");"
@@ -2494,7 +2732,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -2542,7 +2780,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
                 ]
               }
@@ -2616,7 +2854,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const token = pm.environment.get(\"player_token\");",
-                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Copy the access token from Swagger, without Bearer.\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
                   "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
                   "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
                 ]
@@ -2636,6 +2874,28 @@
           "response": []
         }
       ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "oidc_issuer",
+      "value": "http://localhost:8080/realms/mini-wallet",
+      "type": "string"
+    },
+    {
+      "key": "oidc_client_id",
+      "value": "mini-wallet-postman",
+      "type": "string"
+    },
+    {
+      "key": "oidc_callback_url",
+      "value": "https://oauth.pstmn.io/v1/browser-callback",
+      "type": "string"
+    },
+    {
+      "key": "api_audience",
+      "value": "mini-wallet-api",
+      "type": "string"
     }
   ]
 }

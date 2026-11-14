@@ -2,21 +2,37 @@
 
 Import both JSON files in this directory into your **MiniWallet** workspace, then select the **MiniWallet Local** environment. The collection contains request bodies, expected statuses, response checks and automatic ID capture.
 
-## Set your two tokens
+## Log in and get your tokens
 
-1. Open [Users Swagger](http://localhost:5101/swagger), authorize with OAuth2 as your player, and execute `GET /api/v1/profiles/me`. A 404 is fine if you have not created the profile yet.
-2. In the generated **Curl** block, copy only the token after `Authorization: Bearer `, without the prefix or surrounding quotes. Paste it into the environment's **player_token** local value.
-3. Open [Wallet Swagger](http://localhost:5102/swagger) and authorize as the business admin (`admin` / `Admin123!`). Execute `GET /api/v1/wallets/me`; even a 409 response provides the generated Curl block. Copy that token into **admin_token**.
+1. Open **00 - Login and service health → Login as player**.
+2. Select **Authorization → Get New Access Token**. The OAuth settings are already filled in.
+3. Sign in on Keycloak's page with your registered player, or `player` / `Player123!`.
+4. Return to Postman and click **Use Token**, then **Send** on the login request. A 200 response confirms your identity and automatically saves `player_token` in **MiniWallet Local**.
+5. Repeat **Login as admin**, using `admin` / `Admin123!`. This saves `admin_token` separately.
 
-Use your own registered player or the seeded `player` / `Player123!` account. Keep tokens as local values; the supplied environment has both blank. Tokens expire after five minutes. If a request returns 401, sign in through Swagger again and replace the relevant token. The same access token works with both APIs.
+Both requests use **authorization code with PKCE (SHA-256)**. Postman's OAuth helper exchanges the code for tokens at Keycloak's `/protocol/openid-connect/token` endpoint. The visible GET request then calls Keycloak's `userinfo` endpoint to verify the account and capture the selected access token. A player login rejects an admin account so the later permission checks stay meaningful.
 
-The current Keycloak clients register Swagger callback URLs only. These requests reuse access tokens from the existing authorization-code + PKCE login. Postman's built-in OAuth flow would need a separately registered callback; no password-grant workaround is used. See [Postman's OAuth documentation](https://learning.postman.com/docs/use/send-requests/authorization/oauth-20) for its callback requirements.
+Tokens expire after five minutes. In the matching login request, refresh the token under **Authorization** (or use **Get New Access Token** again), select **Use Token**, then **Send** to update the environment. The same access token works with both APIs. No copying from Swagger is needed.
+
+The dedicated `mini-wallet-postman` public client registers Postman's browser callback, requires PKCE S256, and keeps password grant disabled. See [Postman's OAuth documentation](https://learning.postman.com/docs/use/send-requests/authorization/oauth-20) for its token controls.
+
+### Existing Docker installation
+
+New databases import the Postman client automatically. If your Keycloak database predates this collection, run this once from the repository root in PowerShell:
+
+```powershell
+.\postman\Configure-Keycloak.ps1
+```
+
+The script creates or updates only `mini-wallet-postman` using the local container's management credentials. It preserves existing accounts and application data; a database reset is unnecessary. It can be run again safely.
+
+Login settings are collection variables (`oidc_issuer`, `oidc_client_id`, `oidc_callback_url`, `api_audience`), so an existing **MiniWallet Local** environment does not need to be replaced when importing the updated collection.
 
 ## Send requests in order
 
 | Folder | What to test |
 | --- | --- |
-| 00 - Service health | Both API processes respond without authentication. |
+| 00 - Login and service health | Get player/admin tokens and check that both API processes respond. |
 | 01 - Player profile | Create, repeat creation, read and update your profile. Saves `player_id`. |
 | 02 - Admin profile | Admin reads and updates the selected player's profile. |
 | 03 - Wallet happy path | Three wallets, BONUS 100, BET 10, WIN 15, balances and history. Saves transaction IDs. |
@@ -41,3 +57,5 @@ Idempotency keys use `run_id`, generated once and retained for retries. Resendin
 For a deliberately new demo with the same player, clear `run_id`, `bonus_id`, `bet_id`, `win_id` and `expected_usd` in the environment, then restart folder 03 from BONUS. This adds another 105 USD. Do not clear them for a retry. After switching to a different player token, creating or reading that player's profile updates `player_id` and clears the previous demo state automatically.
 
 These manual requests exercise features and sequential retries. They do not establish cross-host concurrency or outage-recovery guarantees; those are covered by the integration suite and separate outage exercises.
+
+To check the token-capture scripts without making network requests, run `node postman/verify-auth-scripts.mjs` with Node 18 or later. The checks execute the actual scripts and ensure wrong-role, expired, mismatched and failed logins cannot populate a token variable.
