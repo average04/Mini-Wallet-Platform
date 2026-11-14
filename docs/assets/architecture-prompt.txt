@@ -1,0 +1,21 @@
+Generated with the built-in image_gen tool.
+
+Use case: infographic-diagram.
+Create a polished, accurate software architecture diagram image for the GitHub README of "Mini Wallet Platform". Wide landscape, white background, flat professional engineering diagram, large legible sans-serif text, navy headings with restrained teal for Users and blue for Wallet, amber for messaging, generous space, no decorative illustration, no perspective.
+Title: "Mini Wallet Platform"
+Subtitle: "Two services. Separate databases. Durable background processing."
+
+Required layout and relationships, all text exactly as specified:
+At top center a box "Browser / Swagger UI". At top right "Keycloak" with subtitle "Sign-in and JWTs". A two-way arrow between these top boxes labeled "Authorization code + PKCE".
+Below, two clearly separated vertical service groups:
+Left group heading "Users service". Vertically stacked nodes "Users API", database cylinder "Users database" with smaller text "Profiles + outbox", then "Users Worker".
+Right group heading "Wallet service". Vertically stacked nodes "Wallet API", database cylinder "Wallet database" with smaller text "Balances + ledger + inbox", then "Wallet Worker".
+The top Browser / Swagger UI has separate arrows down to Users API and Wallet API, both labeled "JWT bearer". APIs validate tokens locally. Do not draw either API forwarding credentials or every business request to Keycloak.
+Within the left group: arrow DOWN from Users API to Users database, labeled "Save profile + event"; arrow DOWN from Users database to Users Worker labeled "Read outbox".
+Between the two worker nodes, outside both groups, one amber box "RabbitMQ". Arrow RIGHT from Users Worker to RabbitMQ labeled "PlayerCreated"; arrow RIGHT from RabbitMQ to Wallet Worker labeled "Consume".
+Within the right group: arrow DOWN from Wallet API to Wallet database labeled "Atomic transactions"; arrow UP from Wallet Worker to Wallet database labeled "Create zero wallets".
+There must be NO arrows between the two databases and NO direct Users API to Wallet API arrow.
+Small note below the right group "USD · EUR · BTC".
+At bottom, separate from runtime flow, a quiet full-width footer headed "Same Clean Architecture in both services" and five equal chips in one row: "Domain", "Application", "Infrastructure", "API", "Worker". No dependency arrows between these footer chips.
+Very small footer note: "API and Worker hosts scale independently".
+Keep all arrows connected to exactly their intended boxes, no crossings through text. Omit Keycloak database and Mailpit from this simplified runtime view. No external logos or unrequested services. All labels spelled correctly, no duplicated nodes, no clipping.
