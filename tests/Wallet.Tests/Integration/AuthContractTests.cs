@@ -32,4 +32,3 @@ public sealed class AuthContractTests : IDisposable
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 }
-

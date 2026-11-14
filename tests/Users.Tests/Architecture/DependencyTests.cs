@@ -16,4 +16,3 @@ public sealed class DependencyTests
         Assert.DoesNotContain(references, r => r.Name!.StartsWith("Wallet."));
     }
 }
-

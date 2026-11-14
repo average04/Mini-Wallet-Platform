@@ -6,4 +6,3 @@ public sealed class RequestFailure(string code, FailureKind kind) : Exception(co
     public string Code { get; } = code;
     public FailureKind Kind { get; } = kind;
 }
-

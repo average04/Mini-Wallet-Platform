@@ -51,4 +51,3 @@ public sealed class WalletDatabase : IAsyncLifetime
         return await db.Transactions.CountAsync(t => t.PlayerId == playerId && t.Kind == kind);
     }
 }
-

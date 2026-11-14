@@ -171,5 +171,4 @@ The AI-assisted implementation and verification session ran from 08:29 to 09:59 
 
 Required backend functionality is implemented. Optional React UI, SignalR, game engine, multi-currency conversion, refunds, production deployment, external real-money integration and automated IdP migration are excluded. One successful WIN settles one BET; no multiple partial settlements. UTC timestamps use database-compatible precision. Single-node local PostgreSQL/RabbitMQ demonstrates recovery from temporary outages, not replicated infrastructure disaster recovery.
 
-The take-home brief allows AI assistance. The implementation follows the approved design and keeps its trade-offs explicit so the candidate can explain and extend it. Source is kept on a feature branch; publishing/submitting the repository is a separate action.
-
+The take-home brief allows AI assistance. The implementation follows the approved design and keeps its trade-offs explicit so the candidate can explain and extend it. Submission to the recruiter remains a separate action.

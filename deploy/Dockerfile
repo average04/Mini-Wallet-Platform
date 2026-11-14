@@ -13,4 +13,3 @@ WORKDIR /app
 COPY --from=build /app .
 USER $APP_UID
 ENTRYPOINT ["sh", "-c", "exec dotnet \"$APP_DLL\" \"$@\"", "--"]
-

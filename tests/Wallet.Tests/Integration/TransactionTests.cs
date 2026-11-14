@@ -236,4 +236,3 @@ public sealed class TransactionTests(WalletDatabase database) : IClassFixture<Wa
         Assert.Equal(90m, await database.BalanceAsync(player.Id));
     }
 }
-

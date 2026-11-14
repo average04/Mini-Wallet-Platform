@@ -9,4 +9,3 @@ TestResults/
 .env
 .env.*
 !.env.example
-

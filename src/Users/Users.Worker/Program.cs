@@ -12,4 +12,3 @@ builder.Services.AddSingleton(_ => new RabbitPublisher(RabbitTopology.Connection
 builder.Services.AddSingleton<IEventPublisher>(p => p.GetRequiredService<RabbitPublisher>());
 builder.Services.AddHostedService<OutboxWorker>();
 await builder.Build().RunAsync();
-

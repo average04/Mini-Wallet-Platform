@@ -12,4 +12,3 @@ public static class Permissions
         if (!actor.Can(permission)) throw new RequestFailure("forbidden", FailureKind.Forbidden);
     }
 }
-

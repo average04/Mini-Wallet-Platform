@@ -56,4 +56,3 @@ public sealed class MoneyTests
         Assert.Equal(0m, wallet.Balance);
     }
 }
-

@@ -14,4 +14,3 @@ public sealed class LedgerEntry
     public string ActorSubject { get; init; } = "";
     public DateTimeOffset CreatedAt { get; init; }
 }
-

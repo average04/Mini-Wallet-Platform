@@ -25,4 +25,3 @@ public static class ActorMapper
             principal.FindFirstValue("email_verified") == "true", permissions);
     }
 }
-

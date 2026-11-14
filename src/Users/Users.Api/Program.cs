@@ -41,4 +41,3 @@ public partial class Program
         await app.RunAsync();
     }
 }
-

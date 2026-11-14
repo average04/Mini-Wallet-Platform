@@ -48,4 +48,3 @@ public sealed class WalletApiFactory(string connectionString = "Host=localhost;D
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }
-

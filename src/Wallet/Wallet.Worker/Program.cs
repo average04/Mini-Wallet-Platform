@@ -12,4 +12,3 @@ builder.Services.AddScoped<ProvisionPlayer>();
 builder.Services.AddSingleton(p => new PlayerEventConsumer(RabbitTopology.ConnectionString(builder.Configuration), p.GetRequiredService<ILogger<PlayerEventConsumer>>()));
 builder.Services.AddHostedService<ProvisioningWorker>();
 await builder.Build().RunAsync();
-

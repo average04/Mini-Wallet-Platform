@@ -64,4 +64,3 @@ public sealed class BalanceAccount
         if (amount.Currency != Currency) throw new WalletRuleException("currency_mismatch");
     }
 }
-

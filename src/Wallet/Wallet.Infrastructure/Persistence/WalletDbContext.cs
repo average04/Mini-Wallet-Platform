@@ -105,4 +105,3 @@ public sealed class WalletDesignTimeFactory : IDesignTimeDbContextFactory<Wallet
     public WalletDbContext CreateDbContext(string[] args) =>
         new(new DbContextOptionsBuilder<WalletDbContext>().UseNpgsql("Host=localhost;Database=wallet_db;Username=wallet_app;Password=local-wallet").Options);
 }
-

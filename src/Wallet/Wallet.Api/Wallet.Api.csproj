@@ -7,4 +7,3 @@
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
 </Project>
-
