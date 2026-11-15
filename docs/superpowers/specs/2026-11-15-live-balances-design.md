@@ -24,4 +24,4 @@ Provide a small `/live-balances` page served by Wallet.Api, with a JWT field, Co
 
 ## Verification
 
-Exercise real PostgreSQL and SignalR connections, including two API hosts sharing Redis. Check player isolation, BET/WIN/BONUS delivery, replay/rejection suppression, expiry/invalid tokens, query-token confinement, and notification outage safety. Run the full existing suite, build Compose, and check the manual page without altering the user's wallet data. Commit design, backend and testing/documentation as separate stages.
+Exercise real PostgreSQL and SignalR connections, including two API hosts sharing Redis. Check player isolation, BET/WIN/BONUS delivery, replay/rejection suppression, expiry/invalid tokens, query-token confinement, notification outage safety and recovery. Run the full existing suite, build Compose, and check the manual page.

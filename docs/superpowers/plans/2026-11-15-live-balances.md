@@ -1,7 +1,5 @@
 # Live Balances Implementation Plan
 
-> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task. Track checks below and in the ignored task ledger.
-
 **Goal:** Deliver authenticated live balance notifications and a usable manual test page.
 
 **Architecture:** Wallet.Api owns SignalR and its Redis adapter. Application exposes whether a committed transaction was replayed; notification dispatch happens after it returns. PostgreSQL stays authoritative.
@@ -16,7 +14,6 @@
 - Existing receipt JSON and transaction HTTP response shapes remain compatible.
 - Only the affected player receives events, and only after commit.
 - Replays/rejections produce no event; notification outages cannot fail money operations.
-- Preserve local wallet data and unrelated IDE files. Use the current checkout on `codex/signalr-balance-updates`.
 
 ## Review focus
 
@@ -32,10 +29,10 @@ Files: `Wallet.Application/Features/Transactions/ExecuteTransaction.cs`, `Transa
 
 Interfaces: `TransactionExecutionResult(TransactionOutcome Outcome, bool IsReplay)`; `BalanceHub` at `/hubs/balances`; `BalanceUpdateNotifier.PublishAsync(TransactionView transaction)`; `Ready` and `BalanceChanged` client events.
 
-- [x] Write integration tests for authenticated hub negotiation, real client delivery to only the owner, credits to a player, replay/rejection suppression and query-token confinement. Observe failure because the hub does not exist.
+- [x] Write integration tests for authenticated hub negotiation, real client delivery to only the owner, credits to a player, replay/rejection suppression and query-token confinement.
 - [x] Return execution metadata without changing persisted outcomes. Implement authenticated group enrollment, bounded best-effort post-commit dispatch and Redis configuration.
 - [x] Add real two-host Redis delivery and Redis-outage transaction-safety tests; test unprovisioned identities and expiring/invalid tokens. Keep credentials out of logs.
-- [x] Run `dotnet test tests/Wallet.Tests/Wallet.Tests.csproj`; require all tests passing. Commit backend with its tests and Compose configuration.
+- [x] Run `dotnet test tests/Wallet.Tests/Wallet.Tests.csproj`; require all tests passing.
 
 ## Task 2: Manual client and documentation
 
@@ -45,9 +42,9 @@ Interfaces: uses Task 1's hub and existing authenticated balances endpoint. Wait
 
 - [x] Add the testing page and pinned official client. Verify event-driven reload and reconnect behavior, including responses arriving while a newer update is pending.
 - [x] Update run/manual-testing instructions and remove SignalR from the current deferred scope. Retain the historical design as history.
-- [x] Run the full solution tests and `docker compose config --quiet`; build/restart only affected local services without resetting data. Inspect the page and live authenticated connection.
-- [x] Commit the testing page and documentation. Review the complete diff and resolve correctness/security blockers before reporting completion.
+- [x] Run the full solution tests and `docker compose config --quiet`; build the affected services. Inspect the page and live authenticated connection.
+- [x] Review the testing page and documentation for correctness and security.
 
 ## Verification result
 
-118 .NET tests (88 Wallet, 30 Users) and 4 client tests passed. Docker build/configuration and the real authenticated WebSocket connection passed without changing local wallet data. Final review found no unresolved blockers.
+The solution tests cover authentication, isolation, replay/rollback behavior, cross-instance Redis delivery, outage safety and recovery. Client tests cover snapshot synchronization. Docker build/configuration and a real authenticated WebSocket connection are also checked.

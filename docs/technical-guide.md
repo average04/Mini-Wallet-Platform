@@ -98,11 +98,11 @@ After enrollment, the server sends `Ready` (no arguments). After a newly committ
 }
 ```
 
-Amounts remain decimal strings. Rejected transactions, rolled-back commits and idempotent replays produce no new event. Dispatch happens after commit, has a two-second bound, and logs failures without changing the successful transaction response.
+Amounts remain decimal strings. Rejected transactions, rolled-back commits and idempotent replays produce no new event. Dispatch happens after commit, has a two-second bound, and logs failures without changing the successful transaction response. Dispatch is awaited inline: a Redis outage can add up to two seconds to a fresh transaction response. This keeps dispatch lifetime tied to the request instead of introducing a background queue.
 
 Events are advisory, not durable or ordered. A disconnection, process failure or Redis outage can lose notifications; concurrent sends can arrive out of order. Reload `GET /api/v1/wallets/me` after `Ready`, on each `BalanceChanged`, and periodically to recover missed updates. Do not overwrite the current balance with an event's potentially older `balanceAfter`, or use this stream as a ledger. The sample serializes/coalesces reads and discards a snapshot if another event arrived during that read.
 
-The development page `/live-balances` uses the official SignalR 10.0.0 JavaScript client, served locally with its MIT license. It accepts an already-issued token, keeps it in memory, and performs no wallet mutations. Create/provision the player first. Paste a new token after expiry. It reloads balances every 30 seconds while connected, as recovery for missed events.
+The development page `/live-balances` uses the official SignalR 10.0.0 JavaScript client, served locally with its MIT license. It accepts an already-issued token, keeps it in memory, and performs no wallet mutations. Use a current Chrome, Edge, Firefox or Safari browser. Create/provision the player first. Paste a new token after expiry. It reloads balances every 30 seconds while connected, as recovery for missed events. If live updates cannot connect during a Redis outage, balances and transactions remain available through Swagger or Postman; reconnect after recovery.
 
 For a React/Next.js client, use `@microsoft/signalr`:
 

@@ -109,7 +109,7 @@ element('connect').addEventListener('click', async () => {
     if (connection !== current) return;
     connection = null;
     clearSession();
-    status('Disconnected', 'Connection closed. Check your token and profile, then connect again.');
+    status('Disconnected', 'Live updates unavailable. Check balances in Swagger or Postman; retry with a valid player token when the connection is available.');
     log('Connection closed.');
   });
   try {
@@ -122,6 +122,6 @@ element('connect').addEventListener('click', async () => {
       if (Number.isFinite(claims.exp)) expiry = setTimeout(() => void disconnect('Token expired. Paste a fresh player token.'), Math.max(0, claims.exp * 1000 - Date.now()));
     } catch { /* Only the server decides whether a token is valid. */ }
   } catch {
-    if (connection === current) await disconnect('Could not connect. Check the player token, profile and Wallet API.');
+    if (connection === current) await disconnect('Live updates unavailable. Check balances in Swagger or Postman; retry with a valid player token when the connection is available.');
   }
 });
