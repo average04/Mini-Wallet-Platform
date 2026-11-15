@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using MiniWallet.Wallet.Api.Auth;
 using MiniWallet.Wallet.Api.Endpoints;
+using MiniWallet.Wallet.Api.Realtime;
 using MiniWallet.Wallet.Application.Features.Reads;
 using MiniWallet.Wallet.Application.Features.Transactions;
 using MiniWallet.Wallet.Infrastructure;
@@ -27,6 +28,7 @@ public partial class Program
         builder.Services.AddScoped<ITransactionHandler, BonusHandler>();
         builder.Services.AddWalletInfrastructure();
         builder.Services.AddApiDocumentation(builder.Configuration);
+        builder.Services.AddBalanceUpdates(builder.Configuration);
         var app = builder.Build();
         if (migrate)
         {
@@ -41,11 +43,16 @@ public partial class Program
         app.UseAuthorization();
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous().ExcludeFromDescription();
         app.MapWalletReads();
+        app.MapHub<BalanceHub>(BalanceHub.Path, options => options.CloseOnAuthenticationExpiration = true)
+            .RequireAuthorization();
         app.MapPost("/api/v1/transactions", async (TransactionRequest request,
             [FromHeader(Name = "Idempotency-Key")] string key, HttpContext context,
-            ExecuteTransaction execute, CancellationToken cancellationToken) =>
+            ExecuteTransaction execute, BalanceUpdateNotifier updates, CancellationToken cancellationToken) =>
             {
-                var outcome = await execute.ExecuteAsync(ActorMapper.Map(context.User), request, key, cancellationToken);
+                var execution = await execute.ExecuteAsync(ActorMapper.Map(context.User), request, key, cancellationToken);
+                var outcome = execution.Outcome;
+                if (!execution.IsReplay && outcome.Transaction is { } changed)
+                    await updates.PublishAsync(changed);
                 return outcome.Transaction is { } transaction
                     ? Results.Created($"/api/v1/transactions/{transaction.TransactionId}", transaction)
                     : ApiErrors.Problem(409, outcome.Code!, context);

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using MiniWallet.Wallet.Api.Realtime;
 
 namespace MiniWallet.Wallet.Api.Auth;
 
@@ -27,6 +28,16 @@ public static class AuthenticationSetup
             };
             options.Events = new JwtBearerEvents
             {
+                OnMessageReceived = context =>
+                {
+                    // Browser WebSockets/SSE cannot set an Authorization header. Never accept query
+                    // tokens for REST, negotiation, or a similarly prefixed route.
+                    if (context.Request.Path == BalanceHub.Path
+                        && (context.HttpContext.WebSockets.IsWebSocketRequest
+                            || context.Request.Headers.Accept.Any(value => value?.Contains("text/event-stream", StringComparison.OrdinalIgnoreCase) == true)))
+                        context.Token = context.Request.Query["access_token"];
+                    return Task.CompletedTask;
+                },
                 OnTokenValidated = context =>
                 {
                     if (string.IsNullOrWhiteSpace(context.Principal?.FindFirst("sub")?.Value))

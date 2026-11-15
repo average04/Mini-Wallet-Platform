@@ -212,6 +212,7 @@ public sealed class TransactionTests(WalletDatabase database) : IClassFixture<Wa
     {
         var player = await database.SeedAsync(100);
         using var app = new WalletApiFactory(database.ConnectionString); using var client = app.CreateClient();
+        await using var feed = await BalanceHubTests.Feed.ConnectAsync(app, player.Subject);
         await using var connection = new NpgsqlConnection(database.ConnectionString);
         await connection.OpenAsync();
         // Test-owned UUID literals and identifier only; force the final ledger insert to fail.
@@ -226,6 +227,7 @@ public sealed class TransactionTests(WalletDatabase database) : IClassFixture<Wa
             Assert.Equal(0, await database.CountAsync(player.Id, "BET"));
             await using var db = database.Open();
             Assert.False(await db.Idempotency.AnyAsync(x => x.PlayerId == player.Id));
+            await feed.AssertQuietAsync();
         }
         finally
         {
@@ -234,5 +236,6 @@ public sealed class TransactionTests(WalletDatabase database) : IClassFixture<Wa
         }
         using var retry = await Post(client, Bet("10"), "retry", player.Subject); await Id(retry);
         Assert.Equal(90m, await database.BalanceAsync(player.Id));
+        Assert.Equal("90", (await feed.NextAsync()).GetProperty("balanceAfter").GetString());
     }
 }

@@ -17,7 +17,7 @@ public sealed class ExecuteTransaction(
 {
     private readonly IReadOnlyDictionary<string, ITransactionHandler> handlersByType = handlers.ToDictionary(h => h.Type, StringComparer.Ordinal);
 
-    public async Task<TransactionOutcome> ExecuteAsync(Actor actor, TransactionRequest request, string key, CancellationToken cancellationToken)
+    public async Task<TransactionExecutionResult> ExecuteAsync(Actor actor, TransactionRequest request, string key, CancellationToken cancellationToken)
     {
         if (request.Type is null || !handlersByType.TryGetValue(request.Type, out var handler))
             throw new RequestFailure("invalid_transaction_type", FailureKind.Invalid);
@@ -42,7 +42,7 @@ public sealed class ExecuteTransaction(
             {
                 if (existing.Fingerprint != fingerprint) throw new RequestFailure("idempotency_conflict", FailureKind.Conflict);
                 await unitOfWork.CommitAsync(cancellationToken);
-                return existing.Outcome;
+                return new(existing.Outcome, IsReplay: true);
             }
             var wallet = await wallets.LockAsync(target.PlayerId, target.Currency, cancellationToken)
                 ?? throw new RequestFailure("wallet_not_found", FailureKind.NotFound);
@@ -69,7 +69,7 @@ public sealed class ExecuteTransaction(
             }
             await receipts.SaveAsync(target.PlayerId, key, outcome, cancellationToken);
             await unitOfWork.CommitAsync(cancellationToken);
-            return outcome;
+            return new(outcome, IsReplay: false);
         }
         catch
         {
