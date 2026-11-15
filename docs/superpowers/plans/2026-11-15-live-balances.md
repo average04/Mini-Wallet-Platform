@@ -32,10 +32,10 @@ Files: `Wallet.Application/Features/Transactions/ExecuteTransaction.cs`, `Transa
 
 Interfaces: `TransactionExecutionResult(TransactionOutcome Outcome, bool IsReplay)`; `BalanceHub` at `/hubs/balances`; `BalanceUpdateNotifier.PublishAsync(TransactionView transaction)`; `Ready` and `BalanceChanged` client events.
 
-- [ ] Write integration tests for authenticated hub negotiation, real client delivery to only the owner, credits to a player, replay/rejection suppression and query-token confinement. Observe failure because the hub does not exist.
-- [ ] Return execution metadata without changing persisted outcomes. Implement authenticated group enrollment, bounded best-effort post-commit dispatch and Redis configuration.
-- [ ] Add real two-host Redis delivery and Redis-outage transaction-safety tests; test unprovisioned identities and expiring/invalid tokens. Keep credentials out of logs.
-- [ ] Run `dotnet test tests/Wallet.Tests/Wallet.Tests.csproj`; require all tests passing. Commit backend with its tests and Compose configuration.
+- [x] Write integration tests for authenticated hub negotiation, real client delivery to only the owner, credits to a player, replay/rejection suppression and query-token confinement. Observe failure because the hub does not exist.
+- [x] Return execution metadata without changing persisted outcomes. Implement authenticated group enrollment, bounded best-effort post-commit dispatch and Redis configuration.
+- [x] Add real two-host Redis delivery and Redis-outage transaction-safety tests; test unprovisioned identities and expiring/invalid tokens. Keep credentials out of logs.
+- [x] Run `dotnet test tests/Wallet.Tests/Wallet.Tests.csproj`; require all tests passing. Commit backend with its tests and Compose configuration.
 
 ## Task 2: Manual client and documentation
 
@@ -43,7 +43,11 @@ Files: `Wallet.Api/wwwroot/live-balances/*`, pinned local client/license; `Progr
 
 Interfaces: uses Task 1's hub and existing authenticated balances endpoint. Wait for `Ready`, serialize/coalesce balance reloads, re-read after reconnect and every 30 seconds. Disconnect on unrecoverable/expired-token error; never persist the token.
 
-- [ ] Add the testing page and pinned official client. Verify event-driven reload and reconnect behavior, including responses arriving while a newer update is pending.
-- [ ] Update run/manual-testing instructions and remove SignalR from the current deferred scope. Retain the historical design as history.
-- [ ] Run the full solution tests and `docker compose config --quiet`; build/restart only affected local services without resetting data. Inspect the page and live authenticated connection.
-- [ ] Commit the testing page and documentation. Review the complete diff and resolve correctness/security blockers before reporting completion.
+- [x] Add the testing page and pinned official client. Verify event-driven reload and reconnect behavior, including responses arriving while a newer update is pending.
+- [x] Update run/manual-testing instructions and remove SignalR from the current deferred scope. Retain the historical design as history.
+- [x] Run the full solution tests and `docker compose config --quiet`; build/restart only affected local services without resetting data. Inspect the page and live authenticated connection.
+- [x] Commit the testing page and documentation. Review the complete diff and resolve correctness/security blockers before reporting completion.
+
+## Verification result
+
+118 .NET tests (88 Wallet, 30 Users) and 4 client tests passed. Docker build/configuration and the real authenticated WebSocket connection passed without changing local wallet data. Final review found no unresolved blockers.

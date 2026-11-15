@@ -2,6 +2,10 @@
 
 Import both JSON files in this directory into your **MiniWallet** workspace, then select the **MiniWallet Local** environment. The collection contains request bodies, expected statuses, response checks and automatic ID capture.
 
+## Watch balance changes live
+
+Open http://localhost:5102/live-balances, copy the current **MiniWallet Local → player_token** value into the page, and click **Connect**. Send a BET as that player or BONUS/WIN as admin from this collection. Only that player's live page updates. Use a new idempotency key for a new transaction; replaying an old request produces no new event. Paste a fresh token and reconnect when it expires.
+
 ## Log in and get your tokens
 
 1. Open **00 - Login and service health → Login as player**.

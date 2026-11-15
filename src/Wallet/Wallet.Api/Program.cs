@@ -38,6 +38,12 @@ public partial class Program
         }
         app.UseApiErrors();
         app.UseApiDocumentation();
+        if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
+        {
+            app.UseStaticFiles();
+            app.MapGet("/live-balances", () => Results.Redirect("/live-balances/index.html"))
+                .AllowAnonymous().ExcludeFromDescription();
+        }
         app.UseCors("web");
         // Expose the WebSocket request feature before JWT's browser query-token check.
         app.UseWebSockets();

@@ -16,6 +16,7 @@ Wait for the APIs to start. Docker starts the databases, message broker and iden
 | --- | --- |
 | Users API and Swagger | http://localhost:5101/swagger |
 | Wallet API and Swagger | http://localhost:5102/swagger |
+| Live balance test page | http://localhost:5102/live-balances |
 | Keycloak | http://localhost:8080 |
 | Email inbox (Mailpit) | http://localhost:8025 |
 
@@ -56,6 +57,12 @@ To switch accounts, log out in Swagger's authorization dialog and authorize agai
 
 This walkthrough assumes a player with no previous transactions. For a fresh account, choose **Register** on the Keycloak sign-in page, verify the email through Mailpit, set the initial password when prompted, then create a profile. See the [registration guide](docs/technical-guide.md#fresh-registration-and-verification) if sign-in expires during verification.
 
+### Watch live balances
+
+Open http://localhost:5102/live-balances, paste the player's access token and click **Connect**. Send a BET, BONUS or WIN in Swagger or Postman with a new idempotency key. The affected player's balances update automatically. Reusing a key does not create a new update. When the token expires, get a fresh one and reconnect.
+
+The page keeps the token in memory. SignalR and Redis relay notifications across API instances; balances reload after reconnecting and periodically to recover missed updates. See the [live update contract](docs/technical-guide.md#live-balance-updates) for integration details.
+
 ## Architecture
 
 ![Mini Wallet Platform architecture: Keycloak signs in clients; Users publishes profile events through RabbitMQ; Wallet creates wallets and processes transactions.](docs/assets/architecture.png)
@@ -84,11 +91,13 @@ dotnet test MiniWalletPlatform.sln
 
 Tests start their own PostgreSQL and RabbitMQ containers; the application stack does not need to be running. Coverage includes authorization, money precision, concurrent spending, safe retries, wallet provisioning and outage recovery.
 
+SignalR tests also start Redis and verify player isolation, delivery between API instances and notification outages. With Node.js 18 or later, run `node --test tests/live-balances-client.test.mjs` for the test page's balance synchronization checks.
+
 ## Scope and details
 
 - Players can manage their profile and view their own balances/history. Admins can access any player's data.
 - BET debits the player's wallet. Admin-only WIN settles a successful BET once; BONUS funds the demo. Wallets cannot go below zero.
 - Amounts are JSON strings: USD/EUR support two decimal places; BTC supports eight.
-- The frontend, SignalR, game engine, currency conversion, production deployment and automated identity migration are outside this take-home's scope.
+- SignalR provides live balance updates with a small manual test page. The full frontend, game engine, currency conversion, production deployment and automated identity migration remain outside this take-home's scope.
 
 See the [technical guide](docs/technical-guide.md) for API rules, error responses, pagination and failure handling, or the [design notes](docs/superpowers/specs/2026-11-13-mini-wallet-platform-design.md) for architectural decisions.

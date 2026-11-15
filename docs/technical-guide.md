@@ -83,6 +83,48 @@ Multiple associations per PlayerId are supported and identity resolution is test
 
 Implement an `ITransactionHandler` in Wallet.Application, define its permission and allowed request fields, register it in the API composition root, extend validation/OpenAPI examples and database constraints if needed, and add money/authorization/replay/concurrency cases. Keep mutations inside the shared executor so a new handler inherits the row lock, atomic history and idempotency behavior.
 
+## Live balance updates
+
+Connect to `/hubs/balances` on the Wallet API using the existing JWT bearer token. The server resolves `(issuer, subject)` to the platform PlayerId and selects that player's group. Clients cannot choose another player or publish changes. Admin-issued WIN/BONUS updates go to the affected player; an admin's own live connection requires their own provisioned profile.
+
+After enrollment, the server sends `Ready` (no arguments). After a newly committed transaction, it sends `BalanceChanged` with one argument:
+
+```json
+{
+  "transactionId": "2bdb417b-1d81-4517-9d74-64bc6dcf34d2",
+  "currency": "USD",
+  "balanceAfter": "105",
+  "createdAt": "2026-11-15T12:00:00+00:00"
+}
+```
+
+Amounts remain decimal strings. Rejected transactions, rolled-back commits and idempotent replays produce no new event. Dispatch happens after commit, has a two-second bound, and logs failures without changing the successful transaction response.
+
+Events are advisory, not durable or ordered. A disconnection, process failure or Redis outage can lose notifications; concurrent sends can arrive out of order. Reload `GET /api/v1/wallets/me` after `Ready`, on each `BalanceChanged`, and periodically to recover missed updates. Do not overwrite the current balance with an event's potentially older `balanceAfter`, or use this stream as a ledger. The sample serializes/coalesces reads and discards a snapshot if another event arrived during that read.
+
+The development page `/live-balances` uses the official SignalR 10.0.0 JavaScript client, served locally with its MIT license. It accepts an already-issued token, keeps it in memory, and performs no wallet mutations. Create/provision the player first. Paste a new token after expiry. It reloads balances every 30 seconds while connected, as recovery for missed events.
+
+For a React/Next.js client, use `@microsoft/signalr`:
+
+```js
+const connection = new signalR.HubConnectionBuilder()
+  .withUrl(walletOrigin + '/hubs/balances', {
+    accessTokenFactory: () => getCurrentAccessToken(),
+    transport: signalR.HttpTransportType.WebSockets,
+    skipNegotiation: true
+  })
+  .configureLogging(signalR.LogLevel.None)
+  .withAutomaticReconnect()
+  .build();
+connection.on('Ready', reloadBalances);
+connection.on('BalanceChanged', reloadBalances);
+await connection.start();
+```
+
+Supply the current PKCE session's token and serialize/coalesce `reloadBalances` as the sample does. Automatic reconnect handles a dropped established connection; retry initial startup explicitly in a production UI. The server closes connections when the token expires. Browser WebSocket/SSE query tokens are accepted only at the exact hub path; REST and negotiation use Authorization headers. Keep tokens/query strings out of logs and use HTTPS outside local development. CORS permits configured `Cors:Origins` only.
+
+Compose starts Redis and sets `ConnectionStrings__Redis=redis:6379` for Wallet.Api. All replicas must share that endpoint and the `mini-wallet:balances:v1` channel prefix. Omitting Redis selects an in-memory transport for a single local process only. API and provisioning workers remain separately deployable; Redis never stores authoritative balances. Load balancers need session affinity for fallback transports; the sample's WebSocket-only connection skips negotiation and does not require affinity. See Microsoft's [Redis backplane documentation](https://learn.microsoft.com/en-us/aspnet/core/signalr/redis-backplane?view=aspnetcore-10.0) and [scaling guidance](https://learn.microsoft.com/en-us/aspnet/core/signalr/scale?view=aspnetcore-10.0).
+
 ## Local operations
 
 ```sh
