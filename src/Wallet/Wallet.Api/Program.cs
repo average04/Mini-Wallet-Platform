@@ -39,6 +39,8 @@ public partial class Program
         app.UseApiErrors();
         app.UseApiDocumentation();
         app.UseCors("web");
+        // Expose the WebSocket request feature before JWT's browser query-token check.
+        app.UseWebSockets();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" })).AllowAnonymous().ExcludeFromDescription();

@@ -55,6 +55,33 @@ public sealed class BalanceHubTests(WalletDatabase database) : IClassFixture<Wal
     }
 
     [Fact]
+    public async Task Browser_query_token_authenticates_on_real_Kestrel()
+    {
+        var player = await database.SeedAsync();
+        using var factory = new WalletApiFactory(database.ConnectionString);
+        factory.UseKestrel(0);
+        using var client = factory.CreateClient();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var socket = new ClientWebSocket();
+        var uri = new UriBuilder(client.BaseAddress!)
+        {
+            Scheme = "ws", Path = "/hubs/balances",
+            Query = "access_token=" + Uri.EscapeDataString(WalletApiFactory.Token(player.Subject))
+        }.Uri;
+        await socket.ConnectAsync(uri, timeout.Token);
+        await socket.SendAsync(Encoding.UTF8.GetBytes("{\"protocol\":\"json\",\"version\":1}\u001e"), WebSocketMessageType.Text, true, timeout.Token);
+        var buffer = new byte[4096];
+        var received = "";
+        while (!received.Contains("Ready", StringComparison.Ordinal))
+        {
+            var result = await socket.ReceiveAsync(buffer.AsMemory(), timeout.Token);
+            Assert.NotEqual(WebSocketMessageType.Close, result.MessageType);
+            received += Encoding.UTF8.GetString(buffer, 0, result.Count);
+        }
+        Assert.Contains("\"target\":\"Ready\"", received);
+    }
+
+    [Fact]
     public async Task Unprovisioned_identity_cannot_open_a_feed()
     {
         using var factory = new WalletApiFactory(database.ConnectionString);
@@ -146,13 +173,25 @@ public sealed class BalanceHubTests(WalletDatabase database) : IClassFixture<Wal
     }
 
     [Theory]
-    [InlineData("/api/v1/wallets/me")]
-    [InlineData("/hubs/balances-other")]
-    public async Task Query_token_cannot_authenticate_other_routes(string route)
+    [InlineData("/api/v1/wallets/me", true)]
+    [InlineData("/hubs/balances-other", true)]
+    [InlineData("/hubs/balances", false)]
+    public async Task Query_token_cannot_authenticate_other_routes(string route, bool eventStream)
     {
         using var factory = new WalletApiFactory(database.ConnectionString);
         using var client = factory.CreateClient();
-        using var response = await client.GetAsync(route + "?access_token=" + WalletApiFactory.Token());
+        using var request = new HttpRequestMessage(HttpMethod.Get, route + "?access_token=" + WalletApiFactory.Token());
+        if (eventStream) request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+        using var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Query_token_cannot_authenticate_negotiation()
+    {
+        using var factory = new WalletApiFactory(database.ConnectionString);
+        using var client = factory.CreateClient();
+        using var response = await client.PostAsync("/hubs/balances/negotiate?negotiateVersion=1&access_token=" + WalletApiFactory.Token(), null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
