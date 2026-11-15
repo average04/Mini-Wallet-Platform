@@ -28,7 +28,7 @@ New databases import the Postman client automatically. If your Keycloak database
 .\postman\Configure-Keycloak.ps1
 ```
 
-The script creates or updates only `mini-wallet-postman` using the local container's management credentials. It preserves existing accounts and application data; a database reset is unnecessary. It can be run again safely.
+The script creates or updates only `mini-wallet-postman` using the local container's management credentials, then verifies the effective protocol mappers and default client scopes. A mismatch reports an error rather than declaring the client ready. It preserves existing accounts and application data; a database reset is unnecessary. It can be run again safely.
 
 Login settings are collection variables (`oidc_issuer`, `oidc_client_id`, `oidc_callback_url`, `api_audience`), so an existing **MiniWallet Local** environment does not need to be replaced when importing the updated collection.
 
