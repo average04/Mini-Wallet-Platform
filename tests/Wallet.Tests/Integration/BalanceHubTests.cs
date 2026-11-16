@@ -167,9 +167,16 @@ public sealed class BalanceHubTests(WalletDatabase database) : IClassFixture<Wal
         using var bet = await TransactionTests.Post(client, new { type = "BET", currency = "USD", amount = "10" }, "live-bet", owner.Subject);
         var betJson = await bet.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("90", (await feed.NextAsync()).GetProperty("balanceAfter").GetString());
-        using var win = await TransactionTests.Post(client, new { type = "WIN", betId = betJson.GetProperty("transactionId").GetGuid(), amount = "15" }, "live-win", "admin", true);
+        var winBody = new { type = "WIN", betId = betJson.GetProperty("transactionId").GetGuid(), multiplier = "2", bonusAmount = "5" };
+        using var win = await TransactionTests.Post(client, winBody, "live-win", "admin", true);
         Assert.Equal(HttpStatusCode.Created, win.StatusCode);
-        Assert.Equal("105", (await feed.NextAsync()).GetProperty("balanceAfter").GetString());
+        Assert.Equal("25", (await win.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("amount").GetString());
+        Assert.Equal("115", (await feed.NextAsync()).GetProperty("balanceAfter").GetString());
+        using var replay = await TransactionTests.Post(client, winBody, "live-win", "admin", true);
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        using var settled = await TransactionTests.Post(client, winBody, "second-win", "admin", true);
+        Assert.Equal(HttpStatusCode.Conflict, settled.StatusCode);
+        await feed.AssertQuietAsync();
     }
 
     [Theory]
