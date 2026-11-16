@@ -3,7 +3,7 @@
     "_postman_id": "b7857f7b-2f75-4542-9d8c-47a06b5bc2b9",
     "name": "MiniWallet - Manual Feature Tests",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Manual feature tests for the local Mini Wallet Platform.\n\nSTART HERE\n1. Select the MiniWallet Local environment.\n2. Open 00 - Login and service health -> Login as player. Authorization -> Get New Access Token -> sign in at Keycloak -> Use Token -> Send. The response verifies your identity and automatically saves player_token.\n3. Repeat Login as admin with admin / Admin123!. It saves admin_token separately. Use your registered player or player / Player123! for the player flow.\n4. Send the remaining requests manually in folders 01 through 07. Request descriptions explain their expected responses. Folder 08 contains optional fresh-account checks.\n\nPostman's OAuth helper performs the authorization-code + PKCE S256 token exchange against Keycloak. The dedicated mini-wallet-postman client registers Postman's callback URLs; password grant remains disabled. The login requests call userinfo to validate the selected account and save the token for the existing bearer-auth requests. Local access tokens expire after one hour: refresh or get a new token in the matching Login request, Use Token, and Send again.\n\nNew Docker installations import the Postman client automatically. For an existing Keycloak database, run ./postman/Configure-Keycloak.ps1 once from PowerShell; it adds/updates only the dedicated Postman client without resetting data.\n\nProfiles and money are real changes to LOCAL demo data. Returned player_id / bonus_id / bet_id / win_id / cursors are saved automatically. BONUS 100, BET 10 and WIN 15 increase an existing USD balance by 105; a fresh player finishes at 105.\n\nIdempotency keys use a generated run_id and remain stable for retries. For an intentionally new money demo with the same player, clear run_id, bonus_id, bet_id, win_id and expected_usd, then restart folder 03 from BONUS. Do not clear these when merely retrying. Switching player and reading/creating the profile resets the demo IDs automatically.\n\nRepository guide: postman/README.md. Do not run the entire collection blindly: optional checks depend on specific account state. No tokens are shipped in these files.\n"
+    "description": "Manual feature tests for the local Mini Wallet Platform.\n\nSTART HERE\n1. Select the MiniWallet Local environment.\n2. Open 00 - Login and service health -> Login as player. Authorization -> Get New Access Token -> sign in at Keycloak -> Use Token -> Send. The response verifies your identity and automatically saves player_token.\n3. Repeat Login as admin with admin / Admin123!. It saves admin_token separately. Use your registered player or player / Player123! for the player flow.\n4. Send the remaining requests manually in folders 01 through 07. Request descriptions explain their expected responses. Folder 08 contains optional fresh-account checks.\n\nPostman's OAuth helper performs the authorization-code + PKCE S256 token exchange against Keycloak. The dedicated mini-wallet-postman client registers Postman's callback URLs; password grant remains disabled. The login requests call userinfo to validate the selected account and save the token for the existing bearer-auth requests. Local access tokens expire after one hour: refresh or get a new token in the matching Login request, Use Token, and Send again.\n\nNew Docker installations import the Postman client automatically. For an existing Keycloak database, run ./postman/Configure-Keycloak.ps1 once from PowerShell; it adds/updates only the dedicated Postman client without resetting data.\n\nProfiles and money are real changes to LOCAL demo data. Returned player_id / bonus_id / bet_id / win_id / cursors are saved automatically. BONUS 100, BET 10 and WIN 20 (2x) increase an existing USD balance by 110; a fresh player finishes at 110.\n\nIdempotency keys use a generated run_id and remain stable for retries. For an intentionally new money demo with the same player, clear run_id, bonus_id, bet_id, win_id and expected_usd, then restart folder 03 from BONUS. Do not clear these when merely retrying. Switching player and reading/creating the profile resets the demo IDs automatically.\n\nRepository guide: postman/README.md. Do not run the entire collection blindly: optional checks depend on specific account state. No tokens are shipped in these files.\n"
   },
   "auth": {
     "type": "noauth"
@@ -691,7 +691,7 @@
     },
     {
       "name": "03 - Wallet happy path",
-      "description": "Send in order. Requires both tokens and a saved player_id. BONUS 100 -> BET 10 -> WIN 15 increases USD by 105 on the first execution. A fresh player ends at 105; an existing player retains their earlier balance/history. Wait for provisioning before BONUS. Repeated sends keep the same idempotency key.",
+      "description": "Send in order. Requires both tokens and a saved player_id. BONUS 100 -> BET 10 -> WIN 20 (2x) increases USD by 110 on the first execution. A fresh player ends at 110; an existing player retains their earlier balance/history. Wait for provisioning before BONUS. Repeated sends keep the same idempotency key.",
       "item": [
         {
           "name": "1 - Check my three wallets",
@@ -900,7 +900,7 @@
           "response": []
         },
         {
-          "name": "4 - Admin WIN USD 15 (saves win_id)",
+          "name": "4 - Admin WIN USD 20 (2x) (saves win_id)",
           "request": {
             "method": "POST",
             "header": [
@@ -918,7 +918,7 @@
               }
             ],
             "url": "{{wallet_base_url}}/api/v1/transactions",
-            "description": "\n\nExpected HTTP status: 201. Authentication: admin.",
+            "description": "Payout = original BET amount × multiplier + bonusAmount. Both inputs are decimal strings; defaults are 2 and 0. The $10 demo bet credits $20. A bonus of 5 would credit $25; use an unsettled bet and new key, and adjust the payout assertion and replay body for custom terms.\n\nExpected HTTP status: 201. Authentication: admin.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -931,7 +931,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"15\"\n}",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"multiplier\": \"2\",\n  \"bonusAmount\": \"0\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -964,7 +964,7 @@
                   "if (pm.response.code === 201) {",
                   "  const tx = pm.response.json();",
                   "  pm.test(\"Correct transaction and player\", () => {",
-                  "    pm.expect(tx.type).to.eql(\"WIN\"); pm.expect(tx.amount).to.eql(\"15\");",
+                  "    pm.expect(tx.type).to.eql(\"WIN\"); pm.expect(tx.amount).to.eql(\"20\");",
                   "    pm.expect(tx.currency).to.eql(\"USD\"); pm.expect(tx.playerId).to.eql(pm.environment.get(\"player_id\"));",
                   "  });",
                   "  pm.environment.set(\"win_id\", tx.transactionId);",
@@ -988,7 +988,7 @@
               }
             ],
             "url": "{{wallet_base_url}}/api/v1/wallets/me",
-            "description": "For a fresh player USD is 105, EUR/BTC are 0. Checks USD equals the WIN response balanceAfter. Fails correctly if another operation changed the balance afterward.\n\nExpected HTTP status: 200. Authentication: player.",
+            "description": "For a fresh player USD is 110, EUR/BTC are 0. Checks USD equals the WIN response balanceAfter. Fails correctly if another operation changed the balance afterward.\n\nExpected HTTP status: 200. Authentication: player.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1417,7 +1417,7 @@
               }
             ],
             "url": "{{wallet_base_url}}/api/v1/transactions",
-            "description": "\n\nExpected HTTP status: 201. Authentication: admin.",
+            "description": "Payout = original BET amount × multiplier + bonusAmount. Both inputs are decimal strings; defaults are 2 and 0. The $10 demo bet credits $20. A bonus of 5 would credit $25; use an unsettled bet and new key, and adjust the payout assertion and replay body for custom terms.\n\nExpected HTTP status: 201. Authentication: admin.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1430,7 +1430,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"15\"\n}",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"multiplier\": \"2\",\n  \"bonusAmount\": \"0\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1465,7 +1465,7 @@
                   "if (pm.response.code === 201) {",
                   "  const tx = pm.response.json();",
                   "  pm.test(\"Correct transaction and player\", () => {",
-                  "    pm.expect(tx.type).to.eql(\"WIN\"); pm.expect(tx.amount).to.eql(\"15\");",
+                  "    pm.expect(tx.type).to.eql(\"WIN\"); pm.expect(tx.amount).to.eql(\"20\");",
                   "    pm.expect(tx.currency).to.eql(\"USD\"); pm.expect(tx.playerId).to.eql(pm.environment.get(\"player_id\"));",
                   "  });",
                   "  pm.test(\"Original transaction ID is replayed\", () => pm.expect(tx.transactionId).to.eql(pm.environment.get(\"win_id\")));",
@@ -1564,7 +1564,7 @@
               }
             ],
             "url": "{{wallet_base_url}}/api/v1/transactions",
-            "description": "\n\nExpected HTTP status: 409. Authentication: admin.",
+            "description": "Payout = original BET amount × multiplier + bonusAmount. Both inputs are decimal strings; defaults are 2 and 0. The $10 demo bet credits $20. A bonus of 5 would credit $25; use an unsettled bet and new key, and adjust the payout assertion and replay body for custom terms.\n\nExpected HTTP status: 409. Authentication: admin.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1577,7 +1577,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"15\"\n}",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"multiplier\": \"2\",\n  \"bonusAmount\": \"0\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2223,6 +2223,207 @@
             }
           ],
           "response": []
+        },
+        {
+          "name": "Zero WIN multiplier -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-zero-multiplier"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "Requires the saved USD bet_id from folder 03. Invalid WIN input is rejected before settlement and does not reserve this key. Expected HTTP status: 400 (invalid_multiplier). Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"multiplier\": \"0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_multiplier\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_multiplier\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Too many USD bonus decimals -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-bonus-precision"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "Requires the saved USD bet_id from folder 03. Invalid WIN input is rejected before settlement and does not reserve this key. Expected HTTP status: 400 (invalid_bonus_amount). Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"bonusAmount\": \"0.001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_bonus_amount\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_bonus_amount\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Legacy WIN amount -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-legacy-win-amount"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "Requires the saved USD bet_id from folder 03. Invalid WIN input is rejected before settlement and does not reserve this key. Expected HTTP status: 400 (invalid_request). Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"20\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_request\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_request\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
         }
       ]
     },
@@ -2485,7 +2686,7 @@
               }
             ],
             "url": "{{wallet_base_url}}/api/v1/transactions",
-            "description": "\n\nExpected HTTP status: 403. Authentication: player.",
+            "description": "Payout = original BET amount × multiplier + bonusAmount. Both inputs are decimal strings; defaults are 2 and 0. The $10 demo bet credits $20. A bonus of 5 would credit $25; use an unsettled bet and new key, and adjust the payout assertion and replay body for custom terms.\n\nExpected HTTP status: 403. Authentication: player.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -2498,7 +2699,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"15\"\n}",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"multiplier\": \"2\",\n  \"bonusAmount\": \"0\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

@@ -67,7 +67,7 @@ public partial class Program
             })
             .RequireAuthorization().WithTags("Transactions")
             .WithSummary("Record a BET, WIN or BONUS")
-            .WithDescription("BET: type, currency, amount. WIN (admin): type, betId, amount. BONUS (admin): type, playerId, currency, amount. Omit fields belonging to other types. Idempotency-Key is scoped to the target player; replay returns the original result.")
+            .WithDescription("BET: type, currency, amount. WIN (admin): type, betId, optional multiplier (default 2) and bonusAmount (default 0); payout = original bet amount * multiplier + bonusAmount, in the bet's currency. Send decimal strings. WIN rejects input amount; response amount is the total payout. BONUS (admin): type, playerId, currency, amount. Omit fields belonging to other types. Idempotency-Key is scoped to the target player; replay returns the original result.")
             .Produces<TransactionView>(201).ProducesProblem(400).ProducesProblem(401).ProducesProblem(403)
             .ProducesProblem(404).ProducesProblem(409).ProducesProblem(503);
         await app.RunAsync();

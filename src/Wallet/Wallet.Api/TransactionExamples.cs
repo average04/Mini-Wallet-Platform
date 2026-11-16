@@ -12,7 +12,8 @@ public sealed class TransactionExamples : IOperationFilter
         media.Examples = new Dictionary<string, IOpenApiExample>
         {
             ["BET"] = Example("Player debits their own USD wallet", """{"type":"BET","currency":"USD","amount":"10"}"""),
-            ["WIN"] = Example("Admin settles a successful BET; replace betId", """{"type":"WIN","betId":"00000000-0000-0000-0000-000000000001","amount":"15"}"""),
+            ["WIN"] = Example("Admin pays 2x the original BET; multiplier defaults to 2 and bonusAmount to 0", """{"type":"WIN","betId":"00000000-0000-0000-0000-000000000001","multiplier":"2","bonusAmount":"0"}"""),
+            ["WIN with bonus"] = Example("Admin adds a bonus after multiplication; a 10-unit BET credits 25", """{"type":"WIN","betId":"00000000-0000-0000-0000-000000000001","multiplier":"2","bonusAmount":"5"}"""),
             ["BONUS"] = Example("Admin funds a player; replace playerId from profile response", """{"type":"BONUS","playerId":"00000000-0000-0000-0000-000000000001","currency":"USD","amount":"100"}""")
         };
     }
