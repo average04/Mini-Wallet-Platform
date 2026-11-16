@@ -11,7 +11,9 @@ Detailed authentication, API contracts and reliability decisions for Mini Wallet
 
 To switch accounts, open **Authorize**, log out the current Swagger OAuth authorization, then authorize again. `prompt=login` forces a fresh Keycloak login. If the current username is locked, choose **Restart login** (the arrow beside it), then enter the other username. Swagger logout clears its token, not the whole Keycloak browser session. Use only one Swagger authorization method at a time.
 
-Both APIs validate the same issuer and `mini-wallet-api` audience. To demonstrate the exact same access token across services, copy the bearer token from a successful Swagger request's displayed curl command into the other UI's **bearer** authorization field. Tokens expire after five minutes; sign in again when needed. Do not share tokens in screenshots or commits.
+Both APIs validate the same issuer and `mini-wallet-api` audience. To demonstrate the exact same access token across services, copy the bearer token from a successful Swagger request's displayed curl command into the other UI's **bearer** authorization field. Local access tokens expire after one hour; sign in again when needed. Existing tokens retain the expiry embedded when issued. Do not share tokens in screenshots or commits.
+
+For an existing Keycloak database, the realm import does not overwrite saved settings. In the `mini-wallet` realm, set **Realm settings → Tokens → Access Token Lifespan** to **1 hour**. The checked-in realm uses 3,600 seconds for new local installations.
 
 Public browser URLs use localhost. Inside Compose, discovery uses the Keycloak service address while the validated issuer remains the public URL. Dynamic backchannel discovery supplies container-reachable signing-key URLs.
 

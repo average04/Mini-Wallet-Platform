@@ -10,7 +10,7 @@
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "bruteForceProtected": true,
-  "accessTokenLifespan": 300,
+  "accessTokenLifespan": 3600,
   "smtpServer": {
     "host": "mailpit",
     "port": "1025",

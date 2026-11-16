@@ -34,6 +34,8 @@ Prefer Postman? Import the [collection and local environment](postman/README.md)
 
 In either Swagger UI, select **Authorize → oauth2**, keep the client ID, select the **openid, profile and email** scopes, then sign in at Keycloak. Both APIs use authorization code with PKCE and JWT bearer tokens.
 
+Local access tokens last **one hour**. After expiry, remove the Swagger authorization and sign in again. Existing tokens keep their original expiry.
+
 To switch accounts, log out in Swagger's authorization dialog and authorize again. If Keycloak keeps the previous username, select **Restart login** beside it. Use the business **admin** account for wallet operations, not the Keycloak management account.
 
 1. Sign in as **player** in Users Swagger. POST `/api/v1/profiles` with:

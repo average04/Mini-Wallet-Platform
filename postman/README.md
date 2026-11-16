@@ -16,7 +16,7 @@ Open http://localhost:5102/live-balances, copy the current **MiniWallet Local â†
 
 Both requests use **authorization code with PKCE (SHA-256)**. Postman's OAuth helper exchanges the code for tokens at Keycloak's `/protocol/openid-connect/token` endpoint. The visible GET request then calls Keycloak's `userinfo` endpoint to verify the account and capture the selected access token. A player login rejects an admin account so the later permission checks stay meaningful.
 
-Tokens expire after five minutes. In the matching login request, refresh the token under **Authorization** (or use **Get New Access Token** again), select **Use Token**, then **Send** to update the environment. The same access token works with both APIs. No copying from Swagger is needed.
+Local access tokens expire after one hour. In the matching login request, refresh the token under **Authorization** (or use **Get New Access Token** again), select **Use Token**, then **Send** to update the environment. Tokens issued before a lifetime change keep their original expiry. The same access token works with both APIs. No copying from Swagger is needed.
 
 The dedicated `mini-wallet-postman` public client registers Postman's browser callback, requires PKCE S256, and keeps password grant disabled. See [Postman's OAuth documentation](https://learning.postman.com/docs/use/send-requests/authorization/oauth-20) for its token controls.
 
