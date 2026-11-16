@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Live balances · Mini Wallet</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./vendor/signalr.min.js" defer></script>
+  <script src="./app.mjs" type="module"></script>
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">MINI WALLET · MANUAL TESTING</p><h1>Live wallet balances</h1></div><span id="status" role="status">Disconnected</span></header>
+    <p class="intro">Connect as a player, then send a BET, BONUS or WIN from Postman or Swagger. Your balances update here automatically.</p>
+    <section class="connection" aria-labelledby="connection-heading">
+      <h2 id="connection-heading">Connect your player</h2>
+      <p>Copy the player's <code>access_token</code> from Postman or your PKCE sign-in. Create the player's profile first.</p>
+      <label for="token">Player access token</label>
+      <div class="controls"><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste access token"><button id="connect">Connect</button><button id="disconnect" class="secondary" disabled>Disconnect</button></div>
+      <p class="hint">The token stays in memory for this connection. Paste a new token after it expires.</p>
+      <p id="message" aria-live="polite">Ready when you are.</p>
+    </section>
+    <section aria-labelledby="balances-heading">
+      <div class="section-heading"><h2 id="balances-heading">Your balances</h2><span id="updated">Waiting for connection</span></div>
+      <div class="balances">
+        <article><span>US DOLLAR</span><strong id="USD">—</strong><small>USD</small></article>
+        <article><span>EURO</span><strong id="EUR">—</strong><small>EUR</small></article>
+        <article><span>BITCOIN</span><strong id="BTC">—</strong><small>BTC</small></article>
+      </div>
+    </section>
+    <section class="events" aria-labelledby="events-heading"><h2 id="events-heading">Connection activity</h2><ol id="events"><li>Waiting for a player token.</li></ol></section>
+    <footer>Use a current Chrome, Edge, Firefox or Safari browser. Balances reload after each notification, on reconnect, and every 30 seconds to recover missed updates. <a href="/swagger">Open Wallet Swagger ↗</a></footer>
+  </main>
+</body>
+</html>

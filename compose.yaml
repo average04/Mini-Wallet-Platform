@@ -37,6 +37,13 @@ services:
   mailpit:
     image: axllent/mailpit:v1.33.1
     ports: ["127.0.0.1:8025:8025"]
+  redis:
+    image: redis:7.4.7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.2
     command: ["start-dev", "--import-realm"]
@@ -95,9 +102,11 @@ services:
     environment:
       <<: *auth
       ConnectionStrings__Database: Host=postgres;Database=wallet_db;Username=wallet_app;Password=local-wallet;Timeout=3
+      ConnectionStrings__Redis: redis:6379
     depends_on:
       init-wallet: {condition: service_completed_successfully}
       keycloak: {condition: service_healthy}
+      redis: {condition: service_healthy}
   users-worker:
     build: {context: ., dockerfile: deploy/Dockerfile, args: {SERVICE: Users, HOST: Worker}}
     environment:

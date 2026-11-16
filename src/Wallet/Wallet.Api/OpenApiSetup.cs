@@ -37,7 +37,7 @@ public static class OpenApiSetup
         });
         services.AddCors(options => options.AddPolicy("web", policy =>
             policy.WithOrigins(configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:3000"])
-                .AllowAnyMethod().AllowAnyHeader().WithExposedHeaders("Location", "Retry-After")));
+                .AllowAnyMethod().AllowAnyHeader().AllowCredentials().WithExposedHeaders("Location", "Retry-After")));
     }
     public static void UseApiDocumentation(this WebApplication app)
     {

@@ -1,0 +1,17 @@
+@microsoft/signalr 10.0.0
+Official ASP.NET Core SignalR JavaScript browser client, MIT licensed.
+
+Source: https://github.com/dotnet/aspnetcore/tree/v10.0.0/src/SignalR/clients/ts/signalr
+Package: https://registry.npmjs.org/@microsoft/signalr/-/signalr-10.0.0.tgz
+SHA-512 (base64): 0BRqz/uCx3JdrOqiqgFhih/+hfTERaUfCZXFB52uMaZJrKaPRzHzMuqVsJC/V3pt7NozcNXGspjKiQEK+X7P2w==
+
+signalr.min.js and its source map are unmodified package assets. LICENSE.txt
+is the upstream v10.0.0 repository license (the npm archive omits this file).
+Served locally so manual testing needs no CDN or npm installation.
+
+SHA-256 of committed files (the source map is retained for debugging):
+signalr.min.js: 10dd7681421e4638a55a3367a68ac0eac1973be1b4471b91b1b9e2306bb0b050
+signalr.min.js.map: 85d0ac265cb7f9678b0fded4c52dfd7717baede729dd61382c2cb048809f2ff7
+
+Verify from the repository root in PowerShell:
+Get-FileHash src/Wallet/Wallet.Api/wwwroot/live-balances/vendor/signalr.min.js* -Algorithm SHA256

@@ -4,6 +4,8 @@ namespace MiniWallet.Wallet.Application.Features.Transactions;
 
 public sealed record TransactionRequest(string Type, string? Amount, string? Currency = null, Guid? PlayerId = null, Guid? BetId = null);
 public sealed record TransactionTarget(Guid PlayerId, string Currency, Guid? BetId = null);
+// Execution metadata is not stored in receipts or exposed in the HTTP response.
+public sealed record TransactionExecutionResult(TransactionOutcome Outcome, bool IsReplay);
 public sealed record TransactionOutcome(TransactionView? Transaction, string? Code)
 {
     public static TransactionOutcome Success(LedgerEntry entry) => new(TransactionView.From(entry), null);

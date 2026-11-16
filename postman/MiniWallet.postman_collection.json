@@ -1,0 +1,2901 @@
+{
+  "info": {
+    "_postman_id": "b7857f7b-2f75-4542-9d8c-47a06b5bc2b9",
+    "name": "MiniWallet - Manual Feature Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Manual feature tests for the local Mini Wallet Platform.\n\nSTART HERE\n1. Select the MiniWallet Local environment.\n2. Open 00 - Login and service health -> Login as player. Authorization -> Get New Access Token -> sign in at Keycloak -> Use Token -> Send. The response verifies your identity and automatically saves player_token.\n3. Repeat Login as admin with admin / Admin123!. It saves admin_token separately. Use your registered player or player / Player123! for the player flow.\n4. Send the remaining requests manually in folders 01 through 07. Request descriptions explain their expected responses. Folder 08 contains optional fresh-account checks.\n\nPostman's OAuth helper performs the authorization-code + PKCE S256 token exchange against Keycloak. The dedicated mini-wallet-postman client registers Postman's callback URLs; password grant remains disabled. The login requests call userinfo to validate the selected account and save the token for the existing bearer-auth requests. Tokens expire after five minutes: refresh or get a new token in the matching Login request, Use Token, and Send again.\n\nNew Docker installations import the Postman client automatically. For an existing Keycloak database, run ./postman/Configure-Keycloak.ps1 once from PowerShell; it adds/updates only the dedicated Postman client without resetting data.\n\nProfiles and money are real changes to LOCAL demo data. Returned player_id / bonus_id / bet_id / win_id / cursors are saved automatically. BONUS 100, BET 10 and WIN 15 increase an existing USD balance by 105; a fresh player finishes at 105.\n\nIdempotency keys use a generated run_id and remain stable for retries. For an intentionally new money demo with the same player, clear run_id, bonus_id, bet_id, win_id and expected_usd, then restart folder 03 from BONUS. Do not clear these when merely retrying. Switching player and reading/creating the profile resets the demo IDs automatically.\n\nRepository guide: postman/README.md. Do not run the entire collection blindly: optional checks depend on specific account state. No tokens are shipped in these files.\n"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "item": [
+    {
+      "name": "00 - Login and service health",
+      "description": "Select MiniWallet Local, then use each Login request: Authorization -> Get New Access Token -> Keycloak sign-in -> Use Token -> Send. The token is saved automatically. The two health requests need no token.",
+      "item": [
+        {
+          "name": "Login as player (saves player_token)",
+          "request": {
+            "method": "GET",
+            "url": "{{oidc_issuer}}/protocol/openid-connect/userinfo",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "oauth2",
+              "oauth2": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code_with_pkce",
+                  "type": "string"
+                },
+                {
+                  "key": "tokenName",
+                  "value": "MiniWallet player",
+                  "type": "string"
+                },
+                {
+                  "key": "authUrl",
+                  "value": "{{oidc_issuer}}/protocol/openid-connect/auth?prompt=login",
+                  "type": "string"
+                },
+                {
+                  "key": "accessTokenUrl",
+                  "value": "{{oidc_issuer}}/protocol/openid-connect/token",
+                  "type": "string"
+                },
+                {
+                  "key": "clientId",
+                  "value": "{{oidc_client_id}}",
+                  "type": "string"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{oidc_callback_url}}",
+                  "type": "string"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid profile email",
+                  "type": "string"
+                },
+                {
+                  "key": "challengeAlgorithm",
+                  "value": "S256",
+                  "type": "string"
+                },
+                {
+                  "key": "client_authentication",
+                  "value": "body",
+                  "type": "string"
+                },
+                {
+                  "key": "addTokenTo",
+                  "value": "header",
+                  "type": "string"
+                },
+                {
+                  "key": "headerPrefix",
+                  "value": "Bearer",
+                  "type": "string"
+                },
+                {
+                  "key": "useBrowser",
+                  "value": true,
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Get your player token entirely from Postman:\n1. Open this request's Authorization tab. OAuth 2.0 / Authorization Code (With PKCE) is configured.\n2. Click Get New Access Token. Sign in at Keycloak as your registered player (or player / Player123!).\n3. Accept the return to Postman and click Use Token.\n4. Click Send on this request. A 200 userinfo response verifies the account and saves player_token automatically in MiniWallet Local. Other API requests already use that variable.\n\nIf the token expires, reopen this request, refresh the token in Authorization (or Get New Access Token), Use Token, and Send again to update the environment. Do not put an admin token in the player slot: this request rejects that mistake so permission tests remain meaningful.\n\nThe token exchange is performed by Postman's OAuth helper: POST /protocol/openid-connect/token with grant_type=authorization_code, code, code_verifier, client_id and redirect_uri. Passwords are entered only on Keycloak's login page. This GET verifies and captures the issued token; it is not a business API login endpoint."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const role = \"player\";",
+                  "pm.test(\"Keycloak accepted the access token (HTTP 200)\", () => {",
+                  "  if (pm.response.code !== 200) throw new Error(\"Open Authorization, Get New Access Token, sign in, Use Token, then Send again.\");",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const token = pm.variables.replaceIn(pm.request.auth.oauth2.get(\"accessToken\") || \"\");",
+                  "  if (!token) throw new Error(\"No OAuth access token selected. Click Use Token before Send.\");",
+                  "  const part = token.split(\".\")[1];",
+                  "  if (!part) throw new Error(\"Expected a JWT access token.\");",
+                  "  const base64 = part.replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "  const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, \"=\")));",
+                  "  const identity = pm.response.json();",
+                  "  const roles = claims.realm_access?.roles || [];",
+                  "  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];",
+                  "  // Userinfo validates the token at Keycloak. These checks catch an accidental wrong account or token selection.",
+                  "  const valid = claims.sub === identity.sub",
+                  "    && claims.iss === pm.variables.get(\"oidc_issuer\")",
+                  "    && audiences.includes(pm.variables.get(\"api_audience\"))",
+                  "    && claims.exp > Math.floor(Date.now() / 1000)",
+                  "    && (role === \"admin\" ? roles.includes(\"admin\") : roles.includes(\"player\") && !roles.includes(\"admin\"));",
+                  "  pm.test(\"Correct account, audience and unexpired token\", () => {",
+                  "    if (!valid) throw new Error(\"Choose the \" + role + \" account and its access token. The environment token was not replaced.\");",
+                  "  });",
+                  "  if (valid) {",
+                  "    pm.environment.set(role + \"_token\", token);",
+                  "    pm.environment.set(role + \"_username\", identity.preferred_username || \"\");",
+                  "    pm.environment.set(role + \"_token_expires_at\", new Date(claims.exp * 1000).toISOString());",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login as admin (saves admin_token)",
+          "request": {
+            "method": "GET",
+            "url": "{{oidc_issuer}}/protocol/openid-connect/userinfo",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "oauth2",
+              "oauth2": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code_with_pkce",
+                  "type": "string"
+                },
+                {
+                  "key": "tokenName",
+                  "value": "MiniWallet admin",
+                  "type": "string"
+                },
+                {
+                  "key": "authUrl",
+                  "value": "{{oidc_issuer}}/protocol/openid-connect/auth?prompt=login",
+                  "type": "string"
+                },
+                {
+                  "key": "accessTokenUrl",
+                  "value": "{{oidc_issuer}}/protocol/openid-connect/token",
+                  "type": "string"
+                },
+                {
+                  "key": "clientId",
+                  "value": "{{oidc_client_id}}",
+                  "type": "string"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{oidc_callback_url}}",
+                  "type": "string"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid profile email",
+                  "type": "string"
+                },
+                {
+                  "key": "challengeAlgorithm",
+                  "value": "S256",
+                  "type": "string"
+                },
+                {
+                  "key": "client_authentication",
+                  "value": "body",
+                  "type": "string"
+                },
+                {
+                  "key": "addTokenTo",
+                  "value": "header",
+                  "type": "string"
+                },
+                {
+                  "key": "headerPrefix",
+                  "value": "Bearer",
+                  "type": "string"
+                },
+                {
+                  "key": "useBrowser",
+                  "value": true,
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Get your admin token entirely from Postman:\n1. Open this request's Authorization tab. OAuth 2.0 / Authorization Code (With PKCE) is configured.\n2. Click Get New Access Token. Sign in at Keycloak as the business admin (admin / Admin123!).\n3. Accept the return to Postman and click Use Token.\n4. Click Send on this request. A 200 userinfo response verifies the account and saves admin_token automatically in MiniWallet Local. Other API requests already use that variable.\n\nIf the token expires, reopen this request, refresh the token in Authorization (or Get New Access Token), Use Token, and Send again to update the environment. Do not put an admin token in the player slot: this request rejects that mistake so permission tests remain meaningful.\n\nThe token exchange is performed by Postman's OAuth helper: POST /protocol/openid-connect/token with grant_type=authorization_code, code, code_verifier, client_id and redirect_uri. Passwords are entered only on Keycloak's login page. This GET verifies and captures the issued token; it is not a business API login endpoint."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const role = \"admin\";",
+                  "pm.test(\"Keycloak accepted the access token (HTTP 200)\", () => {",
+                  "  if (pm.response.code !== 200) throw new Error(\"Open Authorization, Get New Access Token, sign in, Use Token, then Send again.\");",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const token = pm.variables.replaceIn(pm.request.auth.oauth2.get(\"accessToken\") || \"\");",
+                  "  if (!token) throw new Error(\"No OAuth access token selected. Click Use Token before Send.\");",
+                  "  const part = token.split(\".\")[1];",
+                  "  if (!part) throw new Error(\"Expected a JWT access token.\");",
+                  "  const base64 = part.replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "  const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, \"=\")));",
+                  "  const identity = pm.response.json();",
+                  "  const roles = claims.realm_access?.roles || [];",
+                  "  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];",
+                  "  // Userinfo validates the token at Keycloak. These checks catch an accidental wrong account or token selection.",
+                  "  const valid = claims.sub === identity.sub",
+                  "    && claims.iss === pm.variables.get(\"oidc_issuer\")",
+                  "    && audiences.includes(pm.variables.get(\"api_audience\"))",
+                  "    && claims.exp > Math.floor(Date.now() / 1000)",
+                  "    && (role === \"admin\" ? roles.includes(\"admin\") : roles.includes(\"player\") && !roles.includes(\"admin\"));",
+                  "  pm.test(\"Correct account, audience and unexpired token\", () => {",
+                  "    if (!valid) throw new Error(\"Choose the \" + role + \" account and its access token. The environment token was not replaced.\");",
+                  "  });",
+                  "  if (valid) {",
+                  "    pm.environment.set(role + \"_token\", token);",
+                  "    pm.environment.set(role + \"_username\", identity.preferred_username || \"\");",
+                  "    pm.environment.set(role + \"_token_expires_at\", new Date(claims.exp * 1000).toISOString());",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Users API is live",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/health/live",
+            "description": "\n\nExpected HTTP status: 200. Authentication: none.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Wallet API is live",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/health/live",
+            "description": "\n\nExpected HTTP status: 200. Authentication: none.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Player profile",
+      "description": "Set player_token to your newly registered player access token. Send these requests in order. Creating a profile automatically starts wallet provisioning.",
+      "item": [
+        {
+          "name": "1 - Create my profile (saves player_id)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles",
+            "description": "201 for the first create; 200 if this account already has a profile. Saves player_id automatically. A different player resets the saved demo IDs and idempotency session.\n\nExpected HTTP status: [201, 200]. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"{{display_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201 or 200\", () => pm.expect(pm.response.code).to.be.oneOf([201, 200]));",
+                  "",
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  const profile = pm.response.json();",
+                  "  pm.test(\"Profile has a playerId\", () => pm.expect(profile.playerId).to.match(/^[0-9a-f-]{36}$/i));",
+                  "  if (pm.environment.get(\"player_id\") !== profile.playerId) {",
+                  "    [\"run_id\", \"bonus_id\", \"bet_id\", \"win_id\", \"expected_usd\", \"next_cursor\"].forEach(k => pm.environment.unset(k));",
+                  "  }",
+                  "  pm.environment.set(\"player_id\", profile.playerId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2 - Repeat create (same profile)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles",
+            "description": "Run after request 1. Returns the existing profile without creating another or changing its name.\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"{{display_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) pm.test(\"Same player\", () => pm.expect(pm.response.json().playerId).to.eql(pm.environment.get(\"player_id\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3 - Read my profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/me",
+            "description": "Also saves player_id if you already created your profile in Swagger.\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  const profile = pm.response.json();",
+                  "  pm.test(\"Profile has a playerId\", () => pm.expect(profile.playerId).to.match(/^[0-9a-f-]{36}$/i));",
+                  "  if (pm.environment.get(\"player_id\") !== profile.playerId) {",
+                  "    [\"run_id\", \"bonus_id\", \"bet_id\", \"win_id\", \"expected_usd\", \"next_cursor\"].forEach(k => pm.environment.unset(k));",
+                  "  }",
+                  "  pm.environment.set(\"player_id\", profile.playerId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "4 - Update my display name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/me",
+            "description": "Send Read my profile again afterward to confirm the change persists.\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Postman Player Updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) pm.test(\"Same player\", () => pm.expect(pm.response.json().playerId).to.eql(pm.environment.get(\"player_id\")));",
+                  "",
+                  "if (pm.response.code === 200) pm.test(\"Updated name\", () => pm.expect(pm.response.json().displayName).to.eql(\"Postman Player Updated\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Admin profile",
+      "description": "Set admin_token to the business admin access token. These requests use player_id saved in folder 01, not the admin account profile.",
+      "item": [
+        {
+          "name": "1 - Admin reads the player profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/{{player_id}}",
+            "description": "\n\nExpected HTTP status: 200. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) pm.test(\"Same player\", () => pm.expect(pm.response.json().playerId).to.eql(pm.environment.get(\"player_id\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2 - Admin updates the player profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/{{player_id}}",
+            "description": "Changes your selected player display name. Read the profile again as player to confirm.\n\nExpected HTTP status: 200. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Changed by Admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) pm.test(\"Same player\", () => pm.expect(pm.response.json().playerId).to.eql(pm.environment.get(\"player_id\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Wallet happy path",
+      "description": "Send in order. Requires both tokens and a saved player_id. BONUS 100 -> BET 10 -> WIN 15 increases USD by 105 on the first execution. A fresh player ends at 105; an existing player retains their earlier balance/history. Wait for provisioning before BONUS. Repeated sends keep the same idempotency key.",
+      "item": [
+        {
+          "name": "1 - Check my three wallets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/wallets/me",
+            "description": "Wait until 200 before continuing. If the worker is still provisioning, 409 player_not_provisioned with Retry-After: 2 means wait two seconds and Send again. Fresh wallets start at zero; existing money is preserved.\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const wallets = pm.response.json();",
+                  "  pm.test(\"USD, EUR and BTC wallets exist\", () => pm.expect(wallets.map(w => w.currency).sort()).to.eql([\"BTC\", \"EUR\", \"USD\"]));",
+                  "  pm.test(\"Balances are nonnegative strings\", () => wallets.forEach(w => {",
+                  "    pm.expect(w.balance).to.be.a(\"string\"); pm.expect(Number(w.balance)).to.be.at.least(0);",
+                  "  }));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2 - Admin BONUS USD 100 (saves bonus_id)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-bonus"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 201. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BONUS\",\n  \"playerId\": \"{{player_id}}\",\n  \"currency\": \"USD\",\n  \"amount\": \"100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "  const tx = pm.response.json();",
+                  "  pm.test(\"Correct transaction and player\", () => {",
+                  "    pm.expect(tx.type).to.eql(\"BONUS\"); pm.expect(tx.amount).to.eql(\"100\");",
+                  "    pm.expect(tx.currency).to.eql(\"USD\"); pm.expect(tx.playerId).to.eql(pm.environment.get(\"player_id\"));",
+                  "  });",
+                  "  pm.environment.set(\"bonus_id\", tx.transactionId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3 - Player BET USD 10 (saves bet_id)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-bet"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 201. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"USD\",\n  \"amount\": \"10\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"bonus_id\")) throw new Error(\"Missing bonus_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "  const tx = pm.response.json();",
+                  "  pm.test(\"Correct transaction and player\", () => {",
+                  "    pm.expect(tx.type).to.eql(\"BET\"); pm.expect(tx.amount).to.eql(\"10\");",
+                  "    pm.expect(tx.currency).to.eql(\"USD\"); pm.expect(tx.playerId).to.eql(pm.environment.get(\"player_id\"));",
+                  "  });",
+                  "  pm.environment.set(\"bet_id\", tx.transactionId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "4 - Admin WIN USD 15 (saves win_id)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-win"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 201. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"15\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "  const tx = pm.response.json();",
+                  "  pm.test(\"Correct transaction and player\", () => {",
+                  "    pm.expect(tx.type).to.eql(\"WIN\"); pm.expect(tx.amount).to.eql(\"15\");",
+                  "    pm.expect(tx.currency).to.eql(\"USD\"); pm.expect(tx.playerId).to.eql(pm.environment.get(\"player_id\"));",
+                  "  });",
+                  "  pm.environment.set(\"win_id\", tx.transactionId);",
+                  "  pm.test(\"WIN settles the saved BET\", () => pm.expect(tx.betId).to.eql(pm.environment.get(\"bet_id\")));",
+                  "  pm.environment.set(\"expected_usd\", tx.balanceAfter);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "5 - Read final balances",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/wallets/me",
+            "description": "For a fresh player USD is 105, EUR/BTC are 0. Checks USD equals the WIN response balanceAfter. Fails correctly if another operation changed the balance afterward.\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"win_id\")) throw new Error(\"Missing win_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const wallets = pm.response.json();",
+                  "  pm.test(\"USD, EUR and BTC wallets exist\", () => pm.expect(wallets.map(w => w.currency).sort()).to.eql([\"BTC\", \"EUR\", \"USD\"]));",
+                  "  pm.test(\"Balances are nonnegative strings\", () => wallets.forEach(w => {",
+                  "    pm.expect(w.balance).to.be.a(\"string\"); pm.expect(Number(w.balance)).to.be.at.least(0);",
+                  "  }));",
+                  "}",
+                  "",
+                  "if (pm.response.code === 200 && pm.environment.get(\"expected_usd\")) {",
+                  "  pm.test(\"USD matches the recorded WIN balance\", () => pm.expect(pm.response.json().find(w => w.currency === \"USD\").balance).to.eql(pm.environment.get(\"expected_usd\")));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "6 - Read my history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions/me?limit=20",
+            "description": "Fresh player: three successful transactions, newest first. Previous history remains visible. Rejected attempts are excluded.\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code === 200) pm.test(\"History is paginated\", () => { const page = pm.response.json(); pm.expect(page.items).to.be.an(\"array\"); pm.expect(page).to.have.property(\"nextCursor\"); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "7 - Read my BET by transaction ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions/{{bet_id}}",
+            "description": "\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code === 200) pm.test(\"Saved BET\", () => pm.expect(pm.response.json().transactionId).to.eql(pm.environment.get(\"bet_id\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "8 - Admin reads player balances",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/players/{{player_id}}/wallets",
+            "description": "\n\nExpected HTTP status: 200. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const wallets = pm.response.json();",
+                  "  pm.test(\"USD, EUR and BTC wallets exist\", () => pm.expect(wallets.map(w => w.currency).sort()).to.eql([\"BTC\", \"EUR\", \"USD\"]));",
+                  "  pm.test(\"Balances are nonnegative strings\", () => wallets.forEach(w => {",
+                  "    pm.expect(w.balance).to.be.a(\"string\"); pm.expect(Number(w.balance)).to.be.at.least(0);",
+                  "  }));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "9 - Admin reads player history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/players/{{player_id}}/transactions?limit=20",
+            "description": "\n\nExpected HTTP status: 200. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 - Retry and business rules",
+      "description": "Run after folder 03. Keys are stable for this demo session. Replays return the original 201 and transaction ID; they do not add money or history. Read final balances afterward to verify no effect.",
+      "item": [
+        {
+          "name": "1 - Replay BONUS (no extra credit)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-bonus"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 201. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BONUS\",\n  \"playerId\": \"{{player_id}}\",\n  \"currency\": \"USD\",\n  \"amount\": \"100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"bonus_id\")) throw new Error(\"Missing bonus_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) throw new Error(\"Missing run_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "  const tx = pm.response.json();",
+                  "  pm.test(\"Correct transaction and player\", () => {",
+                  "    pm.expect(tx.type).to.eql(\"BONUS\"); pm.expect(tx.amount).to.eql(\"100\");",
+                  "    pm.expect(tx.currency).to.eql(\"USD\"); pm.expect(tx.playerId).to.eql(pm.environment.get(\"player_id\"));",
+                  "  });",
+                  "  pm.test(\"Original transaction ID is replayed\", () => pm.expect(tx.transactionId).to.eql(pm.environment.get(\"bonus_id\")));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2 - Replay BET (no extra debit)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-bet"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 201. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"USD\",\n  \"amount\": \"10\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) throw new Error(\"Missing run_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "  const tx = pm.response.json();",
+                  "  pm.test(\"Correct transaction and player\", () => {",
+                  "    pm.expect(tx.type).to.eql(\"BET\"); pm.expect(tx.amount).to.eql(\"10\");",
+                  "    pm.expect(tx.currency).to.eql(\"USD\"); pm.expect(tx.playerId).to.eql(pm.environment.get(\"player_id\"));",
+                  "  });",
+                  "  pm.test(\"Original transaction ID is replayed\", () => pm.expect(tx.transactionId).to.eql(pm.environment.get(\"bet_id\")));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3 - Replay WIN (no extra payout)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-win"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 201. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"15\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"win_id\")) throw new Error(\"Missing win_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) throw new Error(\"Missing run_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.expect(pm.response.code).to.be.oneOf([201]));",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "  const tx = pm.response.json();",
+                  "  pm.test(\"Correct transaction and player\", () => {",
+                  "    pm.expect(tx.type).to.eql(\"WIN\"); pm.expect(tx.amount).to.eql(\"15\");",
+                  "    pm.expect(tx.currency).to.eql(\"USD\"); pm.expect(tx.playerId).to.eql(pm.environment.get(\"player_id\"));",
+                  "  });",
+                  "  pm.test(\"Original transaction ID is replayed\", () => pm.expect(tx.transactionId).to.eql(pm.environment.get(\"win_id\")));",
+                  "  pm.test(\"WIN settles the saved BET\", () => pm.expect(tx.betId).to.eql(pm.environment.get(\"bet_id\")));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "4 - Same BET key, changed amount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-bet"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 409. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"USD\",\n  \"amount\": \"11\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) throw new Error(\"Missing run_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.expect(pm.response.code).to.be.oneOf([409]));",
+                  "pm.test(\"Problem code: idempotency_conflict\", () => pm.expect(pm.response.json().code).to.eql(\"idempotency_conflict\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "5 - Settle the same BET with a new key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-second-win"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 409. Authentication: admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"15\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"admin_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set admin_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"win_id\")) throw new Error(\"Missing win_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.expect(pm.response.code).to.be.oneOf([409]));",
+                  "pm.test(\"Problem code: bet_already_settled\", () => pm.expect(pm.response.json().code).to.eql(\"bet_already_settled\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "6 - Balance remains unchanged after retries",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/wallets/me",
+            "description": "\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"win_id\")) throw new Error(\"Missing win_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"expected_usd\")) throw new Error(\"Missing expected_usd. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const wallets = pm.response.json();",
+                  "  pm.test(\"USD, EUR and BTC wallets exist\", () => pm.expect(wallets.map(w => w.currency).sort()).to.eql([\"BTC\", \"EUR\", \"USD\"]));",
+                  "  pm.test(\"Balances are nonnegative strings\", () => wallets.forEach(w => {",
+                  "    pm.expect(w.balance).to.be.a(\"string\"); pm.expect(Number(w.balance)).to.be.at.least(0);",
+                  "  }));",
+                  "}",
+                  "",
+                  "if (pm.response.code === 200 && pm.environment.get(\"expected_usd\")) {",
+                  "  pm.test(\"USD matches the recorded WIN balance\", () => pm.expect(pm.response.json().find(w => w.currency === \"USD\").balance).to.eql(pm.environment.get(\"expected_usd\")));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 - Validation failures",
+      "description": "Run after profile creation and wallet provisioning. These requests should be rejected with 400 and should not change your profile or balance.",
+      "item": [
+        {
+          "name": "Empty display name -> 400",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/me",
+            "description": "\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_display_name\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_display_name\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "NUL in display name -> 400 (regression)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/me",
+            "description": "The body contains a JSON-escaped null character. This must return 400, not 503.\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Test\\u0000Player\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_display_name\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_display_name\"));",
+                  "pm.test(\"Not a storage outage\", () => pm.expect(pm.response.headers.has(\"Retry-After\")).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Zero BET amount -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-invalid-zero"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"USD\",\n  \"amount\": \"0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_amount\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_amount\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Too many USD decimals -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-invalid-precision"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"USD\",\n  \"amount\": \"1.001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_amount\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_amount\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Numeric amount instead of string -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-invalid-number"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"USD\",\n  \"amount\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_request\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_request\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Unsupported currency -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-invalid-currency"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"PHP\",\n  \"amount\": \"10\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_request\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_request\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Missing Idempotency-Key -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"USD\",\n  \"amount\": \"10\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_request\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_request\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Invalid history limit -> 400",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions/me?limit=101",
+            "description": "\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_page_size\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_page_size\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Invalid history cursor -> 400",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions/me?cursor=not-a-valid-cursor",
+            "description": "\n\nExpected HTTP status: 400. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test(\"Problem code: invalid_cursor\", () => pm.expect(pm.response.json().code).to.eql(\"invalid_cursor\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06 - Authorization failures",
+      "description": "These intentionally use no token or the player token. Never replace player_token with an admin token: that would invalidate the permission tests.",
+      "item": [
+        {
+          "name": "No token - profile -> 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/me",
+            "description": "\n\nExpected HTTP status: 401. Authentication: none.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.expect(pm.response.code).to.be.oneOf([401]));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "No token - wallets -> 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/wallets/me",
+            "description": "\n\nExpected HTTP status: 401. Authentication: none.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.expect(pm.response.code).to.be.oneOf([401]));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Player reads admin profile route -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/{{player_id}}",
+            "description": "\n\nExpected HTTP status: 403. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.expect(pm.response.code).to.be.oneOf([403]));",
+                  "pm.test(\"Problem code: forbidden\", () => pm.expect(pm.response.json().code).to.eql(\"forbidden\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Player updates admin profile route -> 403",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/{{player_id}}",
+            "description": "\n\nExpected HTTP status: 403. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Must not be saved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.expect(pm.response.code).to.be.oneOf([403]));",
+                  "pm.test(\"Problem code: forbidden\", () => pm.expect(pm.response.json().code).to.eql(\"forbidden\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Player attempts BONUS -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-forbidden-bonus"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 403. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BONUS\",\n  \"playerId\": \"{{player_id}}\",\n  \"currency\": \"USD\",\n  \"amount\": \"100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.expect(pm.response.code).to.be.oneOf([403]));",
+                  "pm.test(\"Problem code: forbidden\", () => pm.expect(pm.response.json().code).to.eql(\"forbidden\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Player attempts WIN -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-forbidden-win"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "\n\nExpected HTTP status: 403. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"WIN\",\n  \"betId\": \"{{bet_id}}\",\n  \"amount\": \"15\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"bet_id\")) throw new Error(\"Missing bet_id. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.expect(pm.response.code).to.be.oneOf([403]));",
+                  "pm.test(\"Problem code: forbidden\", () => pm.expect(pm.response.json().code).to.eql(\"forbidden\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Player reads admin wallets route -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/players/{{player_id}}/wallets",
+            "description": "\n\nExpected HTTP status: 403. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"player_id\")) throw new Error(\"Missing player_id. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.expect(pm.response.code).to.be.oneOf([403]));",
+                  "pm.test(\"Problem code: forbidden\", () => pm.expect(pm.response.json().code).to.eql(\"forbidden\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "07 - History pagination",
+      "description": "Run after the wallet demo so there are at least three transactions. Send first page then next page. The cursor is saved automatically. Keep the same player token for both.",
+      "item": [
+        {
+          "name": "1 - First history page (2 items)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions/me?limit=2",
+            "description": "\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const page = pm.response.json();",
+                  "  pm.test(\"At most 2 items\", () => pm.expect(page.items.length).to.be.at.most(2));",
+                  "  pm.environment.set(\"next_cursor\", page.nextCursor || \"\");",
+                  "  pm.environment.set(\"first_page_ids\", JSON.stringify(page.items.map(t => t.transactionId)));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2 - Next history page",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions/me?limit=2&cursor={{next_cursor}}",
+            "description": "Send First history page first. If next_cursor is empty there is no next page; do not send this request.\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"next_cursor\")) throw new Error(\"Missing next_cursor. Send the prerequisite request described in this request first.\");",
+                  "if (!pm.environment.get(\"first_page_ids\")) throw new Error(\"Missing first_page_ids. Send the prerequisite request described in this request first.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const previous = JSON.parse(pm.environment.get(\"first_page_ids\"));",
+                  "  pm.test(\"No overlap with first page\", () => pm.response.json().items.forEach(t => pm.expect(previous).not.to.include(t.transactionId)));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "08 - Optional fresh-account checks",
+      "description": "Run these manually only at the stated stage, not as part of Run collection. They deliberately depend on fresh account state.",
+      "item": [
+        {
+          "name": "Before profile creation - profile is missing",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{users_base_url}}/api/v1/profiles/me",
+            "description": "Use a newly registered verified account BEFORE creating its profile. A player with an existing profile correctly returns 200 instead.\n\nExpected HTTP status: 404. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.expect(pm.response.code).to.be.oneOf([404]));",
+                  "pm.test(\"Problem code: profile_not_found\", () => pm.expect(pm.response.json().code).to.eql(\"profile_not_found\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "After provisioning - all balances are zero",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/wallets/me",
+            "description": "Only before funding this fresh player. Wait and retry if provisioning returns 409.\n\nExpected HTTP status: 200. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const wallets = pm.response.json();",
+                  "  pm.test(\"USD, EUR and BTC wallets exist\", () => pm.expect(wallets.map(w => w.currency).sort()).to.eql([\"BTC\", \"EUR\", \"USD\"]));",
+                  "  pm.test(\"Balances are nonnegative strings\", () => wallets.forEach(w => {",
+                  "    pm.expect(w.balance).to.be.a(\"string\"); pm.expect(Number(w.balance)).to.be.at.least(0);",
+                  "  }));",
+                  "}",
+                  "",
+                  "if (pm.response.code === 200) pm.test(\"All balances start at zero\", () => pm.response.json().forEach(w => pm.expect(w.balance).to.eql(\"0\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Unfunded EUR BET -> insufficient funds",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{run_id}}-unfunded-eur"
+              }
+            ],
+            "url": "{{wallet_base_url}}/api/v1/transactions",
+            "description": "Only if this player has an unfunded EUR wallet. The USD demo leaves EUR at zero. A rejected attempt is not added to transaction history.\n\nExpected HTTP status: 409. Authentication: player.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{player_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BET\",\n  \"currency\": \"EUR\",\n  \"amount\": \"1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get(\"player_token\");",
+                  "if (!token || !token.trim()) throw new Error(\"Set player_token in the MiniWallet Local environment first. Use the matching Login request in folder 00: Get New Access Token, Use Token, then Send.\");",
+                  "if (/^Bearer\\s/i.test(token)) throw new Error(\"Paste only the token, without the Bearer prefix.\");",
+                  "if (!pm.environment.get(\"run_id\")) pm.environment.set(\"run_id\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.expect(pm.response.code).to.be.oneOf([409]));",
+                  "pm.test(\"Problem code: insufficient_funds\", () => pm.expect(pm.response.json().code).to.eql(\"insufficient_funds\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "oidc_issuer",
+      "value": "http://localhost:8080/realms/mini-wallet",
+      "type": "string"
+    },
+    {
+      "key": "oidc_client_id",
+      "value": "mini-wallet-postman",
+      "type": "string"
+    },
+    {
+      "key": "oidc_callback_url",
+      "value": "https://oauth.pstmn.io/v1/browser-callback",
+      "type": "string"
+    },
+    {
+      "key": "api_audience",
+      "value": "mini-wallet-api",
+      "type": "string"
+    }
+  ]
+}
