@@ -9,6 +9,8 @@ public static class OpenApiSetup
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
         {
+            options.SchemaFilter<ProfileDocumentation>();
+            options.OperationFilter<ProfileDocumentation>();
             options.SwaggerDoc("v1", new OpenApiInfo { Title = "Mini Wallet — Users", Version = "v1",
                 Description = "Sign in with OAuth code + PKCE. Use player for owned operations and admin for administration. All money amounts are decimal strings." });
             options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
