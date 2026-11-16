@@ -23,7 +23,9 @@ public static class ApiErrors
         }
         catch (WalletRuleException error)
         {
-            await Problem(error.Code == "invalid_amount" ? 400 : 409, error.Code, context).ExecuteAsync(context);
+            var status = error.Code is "invalid_amount" or "invalid_multiplier" or "invalid_bonus_amount"
+                or "invalid_payout_precision" or "invalid_payout_amount" ? 400 : 409;
+            await Problem(status, error.Code, context).ExecuteAsync(context);
         }
         catch (BadHttpRequestException)
         {

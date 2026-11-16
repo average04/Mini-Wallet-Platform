@@ -48,14 +48,16 @@ To switch accounts, log out in Swagger's authorization dialog and authorize agai
 2. Sign in as **player** in Wallet Swagger. GET `/api/v1/wallets/me`. All three wallets start at zero. If provisioning is still running, a 409 response means you should retry after two seconds.
 3. Use POST `/api/v1/transactions` for each row below. Select the matching Swagger example, replace the indicated ID, and enter the **Idempotency-Key**.
 
-   | Account | Example | Amount | Replace | Idempotency-Key |
+   | Account | Example | Amount / payout | Replace | Idempotency-Key |
    | --- | --- | --- | --- | --- |
    | Admin | BONUS | USD 100 | `playerId` from step 1 | `demo-bonus-1` |
    | Player | BET | USD 10 | Nothing; copy the returned `transactionId` | `demo-bet-1` |
-   | Admin | WIN | USD 15 | `betId` with the BET's `transactionId` | `demo-win-1` |
+   | Admin | WIN | 2× the bet = USD 20 | `betId` with the BET's `transactionId` | `demo-win-1` |
 
-4. Switch back to **player**. GET `/api/v1/wallets/me` should show **USD 105**, EUR 0 and BTC 0. GET `/api/v1/transactions/me` should show three transactions.
+4. Switch back to **player**. GET `/api/v1/wallets/me` should show **USD 110**, EUR 0 and BTC 0. GET `/api/v1/transactions/me` should show three transactions.
 5. Repeat each POST using its original account, payload and key. The result is replayed without changing the balance or adding another transaction.
+
+WIN uses `betId`, optional `multiplier` (default `"2"`) and `bonusAmount` (default `"0"`), instead of an input `amount`. The payout is **bet amount × multiplier + bonusAmount**. For example, a $10 bet at 2× with a $5 bonus credits $25; the response `amount` is `"25"`. Select **WIN with bonus** to try it on a new unsettled bet with a new key.
 
 This walkthrough assumes a player with no previous transactions. For a fresh account, choose **Register** on the Keycloak sign-in page, verify the email through Mailpit, set the initial password when prompted, then create a profile. See the [registration guide](docs/technical-guide.md#fresh-registration-and-verification) if sign-in expires during verification.
 

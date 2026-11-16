@@ -27,12 +27,17 @@ public sealed class ExecuteTransaction(
         if (string.IsNullOrEmpty(key) || key.Length > 128 || key.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_' or '.' or ':')))
             throw new RequestFailure("invalid_idempotency_key", FailureKind.Invalid);
         var target = await handler.ResolveAsync(actor, request, cancellationToken);
-        var money = Money.Parse(target.Currency, request.Amount!);
-        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        var money = target.Money;
+        var fingerprintPayload = JsonSerializer.Serialize(new
         {
             type = handler.Type, target.PlayerId, target.Currency, target.BetId,
             amount = money.Amount.ToString("0.########", CultureInfo.InvariantCulture)
-        }))));
+        });
+        // Preserve existing BET/BONUS fingerprints. WIN also binds the normalized
+        // components, so different settlement terms cannot reuse a key with the same total.
+        if (target.Payout is { } payout)
+            fingerprintPayload += JsonSerializer.Serialize(new { payout.Multiplier, payout.BonusAmount });
+        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintPayload)));
 
         await unitOfWork.BeginAsync(cancellationToken);
         try

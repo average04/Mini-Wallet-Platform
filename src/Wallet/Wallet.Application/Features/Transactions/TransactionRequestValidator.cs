@@ -6,11 +6,13 @@ public sealed class TransactionRequestValidator : AbstractValidator<TransactionR
     public TransactionRequestValidator()
     {
         RuleFor(x => x.Type).Must(x => x is "BET" or "WIN" or "BONUS");
-        RuleFor(x => x.Amount).NotEmpty().MaximumLength(64);
         When(x => x.Type is "BET" or "BONUS", () =>
         {
+            RuleFor(x => x.Amount).NotEmpty().MaximumLength(64);
             RuleFor(x => x.Currency).Must(x => x is "USD" or "EUR" or "BTC");
             RuleFor(x => x.BetId).Null();
+            RuleFor(x => x.Multiplier).Null();
+            RuleFor(x => x.BonusAmount).Null();
         });
         When(x => x.Type == "BET", () => RuleFor(x => x.PlayerId).Null());
         When(x => x.Type == "BONUS", () => RuleFor(x => x.PlayerId).Must(x => x.HasValue && x != Guid.Empty));
@@ -19,6 +21,9 @@ public sealed class TransactionRequestValidator : AbstractValidator<TransactionR
             RuleFor(x => x.BetId).Must(x => x.HasValue && x != Guid.Empty);
             RuleFor(x => x.Currency).Null();
             RuleFor(x => x.PlayerId).Null();
+            RuleFor(x => x.Amount).Null();
+            RuleFor(x => x.Multiplier).MaximumLength(64);
+            RuleFor(x => x.BonusAmount).MaximumLength(64);
         });
     }
 }

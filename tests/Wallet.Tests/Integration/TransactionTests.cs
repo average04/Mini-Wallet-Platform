@@ -11,7 +11,7 @@ public sealed class TransactionTests(WalletDatabase database) : IClassFixture<Wa
 {
     private static object Bet(string amount) => new { type = "BET", currency = "USD", amount };
     private static object Bonus(Guid id, string amount) => new { type = "BONUS", playerId = id, currency = "USD", amount };
-    private static object Win(Guid id) => new { type = "WIN", betId = id, amount = "15" };
+    private static object Win(Guid id) => new { type = "WIN", betId = id, multiplier = "2", bonusAmount = "5" };
 
     internal static async Task<HttpResponseMessage> Post(HttpClient client, object body, string key, string subject, bool admin = false)
     {
@@ -136,7 +136,7 @@ public sealed class TransactionTests(WalletDatabase database) : IClassFixture<Wa
         var replies = await Task.WhenAll(Post(ca, Win(betId), "win-a", "admin", true), Post(cb, Win(betId), "win-b", "admin", true));
         Assert.Equal(1, replies.Count(r => r.StatusCode == HttpStatusCode.Created));
         Assert.Equal(1, replies.Count(r => r.StatusCode == HttpStatusCode.Conflict));
-        Assert.Equal(105m, await database.BalanceAsync(player.Id));
+        Assert.Equal(115m, await database.BalanceAsync(player.Id));
         Assert.Equal(1, await database.CountAsync(player.Id, "WIN"));
         foreach (var reply in replies) reply.Dispose();
     }

@@ -67,7 +67,25 @@ public partial class Program
             })
             .RequireAuthorization().WithTags("Transactions")
             .WithSummary("Record a BET, WIN or BONUS")
-            .WithDescription("BET: type, currency, amount. WIN (admin): type, betId, amount. BONUS (admin): type, playerId, currency, amount. Omit fields belonging to other types. Idempotency-Key is scoped to the target player; replay returns the original result.")
+            .WithDescription("""
+                | Type | Who | Required fields | Optional fields |
+                | --- | --- | --- | --- |
+                | BET | Player | `type`, `currency`, `amount` | None |
+                | WIN | Admin | `type`, `betId` | `multiplier` (default `"2"`), `bonusAmount` (default `"0"`) |
+                | BONUS | Admin | `type`, `playerId`, `currency`, `amount` | None |
+
+                **WIN payout = original bet amount × multiplier + bonusAmount.** A 10-unit bet at 2x with a 5-unit bonus credits 25. The multiplier includes the stake; the bonus is added afterward. WIN derives player and currency from the bet. Its response `amount` is the calculated total; do not send input `amount` for WIN.
+
+                **Validation**
+                - Send money and multipliers as JSON strings, for example `"10.50"`, not JSON numbers.
+                - BET/BONUS amounts must be positive. USD/EUR allow 2 fractional digits; BTC allows 8. Currency must be `USD`, `EUR` or `BTC`.
+                - WIN multiplier must be positive with at most 8 fractional digits. Bonus must be zero or positive and obey the bet's currency precision. Each decimal string is at most 64 characters.
+                - No signs, spaces, exponents or thousands separators. Fractional currency units and out-of-range payouts are rejected, never rounded.
+                - Required IDs must be nonempty UUIDs. Omit fields belonging to other transaction types. Unknown properties are rejected.
+                - `Idempotency-Key` is required: 1–128 ASCII letters, digits, `-`, `_`, `.` or `:`. It is scoped to the target player. Equivalent retries return the original result; changing WIN multiplier or bonus with the same key returns 409.
+
+                Invalid input returns **400 Problem Details** with `code` and `traceId`; see the response examples. Insufficient funds, an already settled bet, or exceeding the wallet balance limit returns **409**.
+                """)
             .Produces<TransactionView>(201).ProducesProblem(400).ProducesProblem(401).ProducesProblem(403)
             .ProducesProblem(404).ProducesProblem(409).ProducesProblem(503);
         await app.RunAsync();

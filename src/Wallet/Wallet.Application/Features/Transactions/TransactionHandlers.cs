@@ -1,3 +1,4 @@
+using System.Globalization;
 using MiniWallet.Wallet.Application.Abstractions;
 using MiniWallet.Wallet.Domain;
 namespace MiniWallet.Wallet.Application.Features.Transactions;
@@ -17,7 +18,7 @@ public sealed class BetHandler(IIdentityRepository identities) : ITransactionHan
     {
         var playerId = await identities.ResolvePlayerAsync(actor.Issuer, actor.Subject, cancellationToken)
             ?? throw new RequestFailure("player_not_provisioned", FailureKind.Conflict);
-        return new TransactionTarget(playerId, request.Currency!);
+        return new TransactionTarget(playerId, Money.Parse(request.Currency!, request.Amount!));
     }
     public Task ApplyAsync(BalanceAccount wallet, Money money, TransactionTarget target, CancellationToken cancellationToken)
     {
@@ -33,7 +34,9 @@ public sealed class WinHandler(ITransactionRepository transactions) : ITransacti
     {
         var bet = await transactions.FindAsync(request.BetId!.Value, cancellationToken);
         if (bet is null || bet.Kind != "BET") throw new RequestFailure("bet_not_found", FailureKind.NotFound);
-        return new TransactionTarget(bet.PlayerId, bet.Currency, bet.Id);
+        var stake = Money.Parse(bet.Currency, bet.Amount.ToString("0.########", CultureInfo.InvariantCulture));
+        var payout = WinPayout.Calculate(stake, request.Multiplier, request.BonusAmount);
+        return new TransactionTarget(bet.PlayerId, payout.Total, bet.Id, payout);
     }
     public async Task ApplyAsync(BalanceAccount wallet, Money money, TransactionTarget target, CancellationToken cancellationToken)
     {
@@ -47,7 +50,7 @@ public sealed class BonusHandler : ITransactionHandler
     public string Type => "BONUS";
     public string Permission => Permissions.GrantBonus;
     public Task<TransactionTarget> ResolveAsync(Actor actor, TransactionRequest request, CancellationToken cancellationToken)
-        => Task.FromResult(new TransactionTarget(request.PlayerId!.Value, request.Currency!));
+        => Task.FromResult(new TransactionTarget(request.PlayerId!.Value, Money.Parse(request.Currency!, request.Amount!)));
     public Task ApplyAsync(BalanceAccount wallet, Money money, TransactionTarget target, CancellationToken cancellationToken)
     {
         wallet.Credit(money);

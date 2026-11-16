@@ -26,7 +26,7 @@ public sealed class AuthContractTests : IDisposable
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", WalletApiFactory.Token());
         request.Headers.Add("Idempotency-Key", "denied");
         request.Content = JsonContent.Create(type == "WIN"
-            ? (object)new { type, betId = Guid.NewGuid(), amount = "1" }
+            ? (object)new { type, betId = Guid.NewGuid(), multiplier = "2" }
             : new { type, playerId = Guid.NewGuid(), currency = "USD", amount = "1" });
         using var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
