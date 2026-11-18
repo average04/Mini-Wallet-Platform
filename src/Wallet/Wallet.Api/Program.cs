@@ -1,9 +1,10 @@
 using System.Text.Json.Serialization;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using MiniWallet.Wallet.Api.Auth;
 using MiniWallet.Wallet.Api.Endpoints;
 using MiniWallet.Wallet.Api.Realtime;
-using MiniWallet.Wallet.Application.Features.Reads;
+using MiniWallet.Wallet.Application;
 using MiniWallet.Wallet.Application.Features.Transactions;
 using MiniWallet.Wallet.Infrastructure;
 using MiniWallet.Wallet.Infrastructure.Persistence;
@@ -20,12 +21,7 @@ public partial class Program
         builder.Services.AddPlatformAuthentication(builder.Configuration, builder.Environment);
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow);
         builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
-        builder.Services.AddScoped<ExecuteTransaction>();
-        builder.Services.AddScoped<WalletQueries>();
-        builder.Services.AddScoped<TransactionRequestValidator>();
-        builder.Services.AddScoped<ITransactionHandler, BetHandler>();
-        builder.Services.AddScoped<ITransactionHandler, WinHandler>();
-        builder.Services.AddScoped<ITransactionHandler, BonusHandler>();
+        builder.Services.AddWalletApplication();
         builder.Services.AddWalletInfrastructure();
         builder.Services.AddApiDocumentation(builder.Configuration);
         builder.Services.AddBalanceUpdates(builder.Configuration);
@@ -55,9 +51,9 @@ public partial class Program
             .RequireAuthorization();
         app.MapPost("/api/v1/transactions", async (TransactionRequest request,
             [FromHeader(Name = "Idempotency-Key")] string key, HttpContext context,
-            ExecuteTransaction execute, BalanceUpdateNotifier updates, CancellationToken cancellationToken) =>
+            ISender sender, BalanceUpdateNotifier updates, CancellationToken cancellationToken) =>
             {
-                var execution = await execute.ExecuteAsync(ActorMapper.Map(context.User), request, key, cancellationToken);
+                var execution = await sender.Send(new ExecuteTransactionCommand(ActorMapper.Map(context.User), request, key), cancellationToken);
                 var outcome = execution.Outcome;
                 if (!execution.IsReplay && outcome.Transaction is { } changed)
                     await updates.PublishAsync(changed);
