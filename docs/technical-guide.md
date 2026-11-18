@@ -62,12 +62,20 @@ Errors use Problem Details with `code` and `traceId`: 400 validation, 401 invali
 There are **13 projects**: five per service, two service test projects and one small Contracts project.
 
 - **Domain:** money, balance and profile invariants; no framework/database dependencies.
-- **Application:** use cases, transaction handlers, permissions and focused repository/unit-of-work ports.
+- **Application:** MediatR commands, queries and handlers, request validators, transaction strategies, permissions and focused repository/unit-of-work ports.
 - **Infrastructure:** EF mappings/migrations, PostgreSQL repositories and RabbitMQ adapters.
 - **API:** HTTP contracts, validation composition, provider-specific claim mapping and bearer validation.
 - **Worker:** independent background-processing composition root.
 
 Users and Wallet have separate databases/roles. They never read each other's database. A shared PostgreSQL container is a local hosting convenience, not shared ownership. Domain/Application dependency tests enforce inward references. Focused repositories isolate persistence changes; changing a database still requires suitable adapters, migrations and equivalent concurrency guarantees.
+
+API endpoints map verified claims into `Actor`, build an application command or query, and call `ISender.Send` with the request cancellation token. Each request has an `IRequestHandler` in its own service's Application project. `AddUsersApplication` and `AddWalletApplication` scan only their respective assemblies and register validators and transaction strategies. Handlers use the existing scoped repositories/unit of work; MediatR does not open a separate DI scope or database transaction.
+
+Users uses `CreateProfileCommand`, `UpdateProfileCommand` and `GetProfileQuery`. Wallet uses `ExecuteTransactionCommand`, `GetBalancesQuery`, `GetTransactionHistoryQuery` and `GetTransactionQuery`; SignalR uses `ResolveWalletPlayerQuery` before joining the authenticated player's group. These are internal application messages: HTTP request/response bodies and Swagger/Postman contracts stay the same. There is no new HTTP endpoint.
+
+Authorization, identity lookup and FluentValidation retain their existing order inside the handlers. There is deliberately no blanket validation pipeline running ahead of permission checks, so forbidden admin operations still return 403 before payload validation or receipt lookup. Domain checks remain framework-independent. The outbox/inbox and worker loops continue using RabbitMQ for durable delivery; MediatR handles only in-process calls and supplies no delivery durability.
+
+The project pins **MediatR 12.5.0**, published under [Apache-2.0](https://github.com/jbogard/MediatR/blob/v12.5.0/LICENSE), using its built-in dependency-injection registration. The take-home requires no MediatR license key or additional Docker configuration. Domain and shared event Contracts do not depend on MediatR.
 
 A wallet transaction reserves its key, locks the target wallet with `SELECT FOR UPDATE`, applies a handler, appends successful history and saves the response in one transaction. Row locks work across API processes. A unique WIN/bet constraint and nonnegative balance constraints add database protection. No network call happens inside this transaction.
 
@@ -89,7 +97,7 @@ Multiple associations per PlayerId are supported and identity resolution is test
 
 ### Add a transaction type
 
-Implement an `ITransactionHandler` in Wallet.Application, define its permission and allowed request fields, register it in the API composition root, extend validation/OpenAPI examples and database constraints if needed, and add money/authorization/replay/concurrency cases. Keep mutations inside the shared executor so a new handler inherits the row lock, atomic history and idempotency behavior.
+Implement an `ITransactionHandler` in Wallet.Application, define its permission and allowed request fields, register it in `AddWalletApplication`, extend validation/OpenAPI examples and database constraints if needed, and add money/authorization/replay/concurrency cases. `ExecuteTransactionHandler` is the MediatR command handler; BET/WIN/BONUS implementations of `ITransactionHandler` are the money-operation strategies it selects. Keep mutations inside this shared executor so a new strategy inherits the row lock, atomic history and idempotency behavior.
 
 ## Live balance updates
 

@@ -83,6 +83,8 @@ Both services use the same Clean Architecture structure:
 
 Each service owns its database. APIs and workers run separately and can scale independently. An outbox/inbox makes wallet creation durable; database transactions, row locks and idempotency keys protect money operations from concurrent requests and retries.
 
+API use cases run through **MediatR**: endpoint → `ISender.Send` → application command/query handler → domain and repositories. FluentValidation runs in the handlers after authorization. RabbitMQ carries messages between services; MediatR dispatches calls within each API process.
+
 Provider-specific claims stay at the API boundary. Profiles and wallets use a stable platform `PlayerId`, so changing identity providers does not require rewriting business rules.
 
 ## Run tests
