@@ -1,6 +1,6 @@
 using MiniWallet.Users.Api.Auth;
 using MiniWallet.Users.Api.Endpoints;
-using MiniWallet.Users.Application.Features.Profiles;
+using MiniWallet.Users.Application;
 using MiniWallet.Users.Infrastructure;
 using MiniWallet.Users.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,10 +18,7 @@ public partial class Program
             new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
         builder.Services.AddApiDocumentation(builder.Configuration);
         builder.Services.AddUsersInfrastructure();
-        builder.Services.AddScoped<ProfileRequestValidator>();
-        builder.Services.AddScoped<CreateProfile>();
-        builder.Services.AddScoped<GetProfile>();
-        builder.Services.AddScoped<UpdateProfile>();
+        builder.Services.AddUsersApplication();
         builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow);
         builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
         var app = builder.Build();

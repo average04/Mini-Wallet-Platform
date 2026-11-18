@@ -1,13 +1,17 @@
+using MediatR;
 using MiniWallet.Contracts;
 using MiniWallet.Users.Application.Abstractions;
 using MiniWallet.Users.Domain;
 namespace MiniWallet.Users.Application.Features.Profiles;
 
-public sealed class CreateProfile(IProfileRepository profiles, IIdentityRepository identities, IPlayerEventOutbox outbox,
-    IUnitOfWork unitOfWork, ProfileRequestValidator validator)
+public sealed record CreateProfileCommand(Actor Actor, ProfileRequest Profile) : IRequest<CreateProfileResult>;
+
+public sealed class CreateProfileHandler(IProfileRepository profiles, IIdentityRepository identities, IPlayerEventOutbox outbox,
+    IUnitOfWork unitOfWork, ProfileRequestValidator validator) : IRequestHandler<CreateProfileCommand, CreateProfileResult>
 {
-    public async Task<CreateProfileResult> ExecuteAsync(Actor actor, ProfileRequest request, CancellationToken cancellationToken)
+    public async Task<CreateProfileResult> Handle(CreateProfileCommand command, CancellationToken cancellationToken)
     {
+        var (actor, request) = command;
         Permissions.Require(actor, Permissions.Create);
         if (!actor.EmailVerified) throw new RequestFailure("email_not_verified", FailureKind.Forbidden);
         if (!validator.Validate(request).IsValid) throw new RequestFailure("invalid_display_name", FailureKind.Invalid);

@@ -2,23 +2,28 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using MediatR;
 using MiniWallet.Wallet.Application.Abstractions;
 using MiniWallet.Wallet.Domain;
 
 namespace MiniWallet.Wallet.Application.Features.Transactions;
 
-public sealed class ExecuteTransaction(
+public sealed record ExecuteTransactionCommand(Actor Actor, TransactionRequest Transaction, string IdempotencyKey)
+    : IRequest<TransactionExecutionResult>;
+
+public sealed class ExecuteTransactionHandler(
     IEnumerable<ITransactionHandler> handlers,
     IWalletRepository wallets,
     ITransactionRepository transactions,
     IIdempotencyRepository receipts,
     IUnitOfWork unitOfWork,
-    TransactionRequestValidator validator)
+    TransactionRequestValidator validator) : IRequestHandler<ExecuteTransactionCommand, TransactionExecutionResult>
 {
     private readonly IReadOnlyDictionary<string, ITransactionHandler> handlersByType = handlers.ToDictionary(h => h.Type, StringComparer.Ordinal);
 
-    public async Task<TransactionExecutionResult> ExecuteAsync(Actor actor, TransactionRequest request, string key, CancellationToken cancellationToken)
+    public async Task<TransactionExecutionResult> Handle(ExecuteTransactionCommand command, CancellationToken cancellationToken)
     {
+        var (actor, request, key) = command;
         if (request.Type is null || !handlersByType.TryGetValue(request.Type, out var handler))
             throw new RequestFailure("invalid_transaction_type", FailureKind.Invalid);
         // Never expose a cached admin result before checking current permissions.
